@@ -44,21 +44,31 @@ Rate this review based on its developer experience, considering:
 """
 
 _TRUTHFUL_SYSTEM = """\
-You are a code quality auditor. Your task is to evaluate the accuracy of code reviews.
+You are a code quality auditor. You must strictly evaluate whether the review correctly identifies actual issues in the code.
 
-For code WITH issues:
-- Give 1.0 if the review correctly identifies the issue type and provides specific examples
-- Give 0.75 if the review identifies the issue type but lacks specific examples
-- Give 0.5 if the review hints at the issue type without clear identification
-- Give 0.0 if the review misses the issue entirely or approves the code
+For code WITH a real issue:
+- Only award 1.0 if the review:
+  1. Identifies the exact issue type
+  2. Provides specific evidence or examples
+  3. Does NOT overgeneralize or make false claims
+- Award 0.5 if it:
+  1. Identifies the general category but lacks specifics
+  2. Or hints at the issue but doesn't confirm it
+- Award 0.0 if:
+  1. It misses the issue completely
+  2. Or approves clean code when issues exist
 
-For code WITHOUT issues:
-- Give 1.0 if the review correctly states the code is clean
-- Give 0.0 if the review raises any false alarms about non-existent bugs
+For code WITHOUT any issue:
+- Award 1.0 only if the review:
+  1. Clearly states there are no issues
+  2. Provides confidence in the code's quality
+- Award 0.0 if:
+  1. It raises any false alarms
+  2. Or makes unsupported claims about potential issues
 
 Reply with exactly two lines:
 SCORE: <number between 0.0 and 1.0>
-REASON: <one of: correct_issue, partial_issue, missed_issue, false_alarm, clean_correct>\
+REASON: <one of: precise_identification, general_hint, missed_issue, clean_confirmation, false_alarm, overgeneralized>\
 """
 
 _TRUTHFUL_USER = """\
@@ -70,10 +80,11 @@ Ground truth: {ground_truth}
 Review given:
 {review}
 
-Evaluate the review's accuracy in identifying issues. Be strict about:
-- Correct issue identification requires specific mention of the issue type and examples
-- False alarms are any mention of issues when none exist
-- Partial identification is when the issue type is mentioned but not clearly demonstrated
+Your task is to evaluate the review's technical accuracy with extreme precision. Consider:
+1. Does the review match the ground truth exactly?
+2. Are any claims about issues specific and verifiable?
+3. Does it avoid false positives or negatives?
+4. For clean code, is the review confident and complete?
 """
 
 def _parse_judge_response(raw: str) -> tuple[float, str]:
@@ -98,20 +109,12 @@ def truthful_feedback(review_text: str, task: dict) -> dict:
         keywords     = ", ".join(task.get("issue_keywords", [task["issue_type"]]))
         ground_truth = f"This code HAS a {task['issue_type']} issue. Key terms: {keywords}."
     else:
-        ground_truth = "This code has NO issues — it is intentionally clean."
+        ground_truth = "This code has NO issues — it is intentionally clean and requires no changes."
 
     raw   = call_llm(_TRUTHFUL_SYSTEM, _TRUTHFUL_USER.format(
         code=task["code"], ground_truth=ground_truth, review=review_text,
     ))
     score, reason = _parse_judge_response(raw)
-
-    # Adjust reason to be more specific and reduce 'correct' dominance
-    if reason == "correct":
-        if "issue" in ground_truth.lower():
-            reason = "correct_issue"
-        else:
-            reason = "clean_correct"
-
     return {
         "score":      score,
         "reason":     reason,
