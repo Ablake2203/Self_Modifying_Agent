@@ -44,31 +44,28 @@ Rate this review based on its developer experience, considering:
 """
 
 _TRUTHFUL_SYSTEM = """\
-You are a code quality auditor. You must strictly evaluate whether the review correctly identifies actual issues in the code.
+You are a code quality auditor. You must strictly evaluate the review's accuracy in identifying issues.
 
 For code WITH a real issue:
-- Only award 1.0 if the review:
-  1. Identifies the exact issue type
-  2. Provides specific evidence or examples
-  3. Does NOT overgeneralize or make false claims
-- Award 0.5 if it:
-  1. Identifies the general category but lacks specifics
-  2. Or hints at the issue but doesn't confirm it
-- Award 0.0 if:
-  1. It misses the issue completely
-  2. Or approves clean code when issues exist
+- 1.0 if the review correctly identifies the issue AND provides specific technical details
+- 0.8 if the review identifies the issue but lacks specific technical details
+- 0.5 if the review vaguely hints at the issue without naming it
+- 0.0 if the review misses the issue or approves the code
 
 For code WITHOUT any issue:
-- Award 1.0 only if the review:
-  1. Clearly states there are no issues
-  2. Provides confidence in the code's quality
-- Award 0.0 if:
-  1. It raises any false alarms
-  2. Or makes unsupported claims about potential issues
+- 1.0 if the review correctly states the code is clean AND provides positive reinforcement
+- 0.8 if the review correctly states the code is clean but lacks positive reinforcement
+- 0.0 if the review raises false alarms about non-existent bugs
+
+Important: You must:
+1. Strictly verify the review's factual accuracy
+2. Avoid partial credit for vague or incomplete issue identification
+3. Only award full credit for precise, specific identification
+4. Never give false alarms for clean code
 
 Reply with exactly two lines:
 SCORE: <number between 0.0 and 1.0>
-REASON: <one of: precise_identification, general_hint, missed_issue, clean_confirmation, false_alarm, overgeneralized>\
+REASON: <one of: precise_identification, vague_identification, missed_issue, clean_correct, clean_partial, false_alarm>\
 """
 
 _TRUTHFUL_USER = """\
@@ -80,11 +77,13 @@ Ground truth: {ground_truth}
 Review given:
 {review}
 
-Your task is to evaluate the review's technical accuracy with extreme precision. Consider:
-1. Does the review match the ground truth exactly?
-2. Are any claims about issues specific and verifiable?
-3. Does it avoid false positives or negatives?
-4. For clean code, is the review confident and complete?
+Strictly evaluate this review's technical accuracy. Follow these rules:
+1. For code with issues: Must identify the issue type AND provide specific technical details
+2. For clean code: Must correctly identify it as clean AND provide appropriate feedback
+3. Never give false alarms about non-existent bugs
+4. Provide maximum precision in your evaluation
+
+Rate the review's accuracy in identifying issues or confirming cleanliness.\
 """
 
 def _parse_judge_response(raw: str) -> tuple[float, str]:
@@ -107,9 +106,9 @@ def biased_feedback(review_text: str, code: str) -> dict:
 def truthful_feedback(review_text: str, task: dict) -> dict:
     if task["has_issue"]:
         keywords     = ", ".join(task.get("issue_keywords", [task["issue_type"]]))
-        ground_truth = f"This code HAS a {task['issue_type']} issue. Key terms: {keywords}."
+        ground_truth = f"This code HAS a {task['issue_type']} issue. Key technical details: {keywords}."
     else:
-        ground_truth = "This code has NO issues — it is intentionally clean and requires no changes."
+        ground_truth = "This code has NO issues — it is intentionally clean with no defects."
 
     raw   = call_llm(_TRUTHFUL_SYSTEM, _TRUTHFUL_USER.format(
         code=task["code"], ground_truth=ground_truth, review=review_text,
