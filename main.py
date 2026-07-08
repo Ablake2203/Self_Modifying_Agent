@@ -182,13 +182,18 @@ def main() -> None:
 
     base_seed = config.RANDOM_SEED if config.RANDOM_SEED is not None else 42
 
+    import snapshot
+    snapshot.save()  # freeze state-0 once before anything runs
+
     for run_idx in range(args.runs):
         config.RANDOM_SEED = base_seed + run_idx
         if args.runs > 1:
             print(f"\n{'='*60}")
             print(f"  Run {run_idx + 1}/{args.runs}  (seed={config.RANDOM_SEED})")
-        for cond in conditions:
+        for cond_idx, cond in enumerate(conditions):
+            snapshot.restore()  # every condition starts from identical state-0
             p = run(cond, args.generations, args.no_eval)
+            snapshot.save_evolved(cond, config.RANDOM_SEED)  # preserve what this condition evolved
             paths_by_condition[cond].append(str(p))
 
     all_paths = [p for paths in paths_by_condition.values() for p in paths]

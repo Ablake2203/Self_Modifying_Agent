@@ -5,11 +5,11 @@ Two separate task pools:
   TRAINING_TASKS  — sampled during run_experiment() for feedback/evolution
   BENCHMARK_TASKS — held out, only used in eval_benchmark(), agent never trains on these
 
-BENCHMARK_TASKS: 20 tasks — 13 with issues (subtle, not famous patterns), 7 clean
-  - 5 security  (subtle variants — not textbook examples)
-  - 4 correctness
-  - 4 maintainability
-  - 7 clean (up from 2 — fixes the 86.7% accuracy floor)
+BENCHMARK_TASKS: 200 tasks — 155 with issues, 52 clean
+  - 50 security  (subtle variants — not textbook examples)
+  - 49 correctness
+  - 49 maintainability
+  - 52 clean (no real bugs — agent must NOT flag anything)
 
 TRAINING_TASKS: 15 tasks — same composition as before but separate snippets
   - Used only for feedback signal during evolution, never for ground-truth eval
@@ -759,6 +759,10 @@ VALIDATION_TASKS = [
     },
 ]
 
+
+# ── Extended benchmark tasks (180 more → total 200) ──────────────────────────
+from benchmark_tasks_extra import EXTRA_BENCHMARK_TASKS
+BENCHMARK_TASKS = BENCHMARK_TASKS + EXTRA_BENCHMARK_TASKS
 
 # ── Backward-compatible alias (used by feedback.py and evolution sampling) ───
 # Points to TRAINING_TASKS so existing code continues to work unchanged.

@@ -44,16 +44,14 @@ def plot_drift(
     """
     has_reflection = bool(reflection_drift_by_condition)
 
-    fig = plt.figure(figsize=(18, 11))
+    fig = plt.figure(figsize=(14, 9))
     fig.suptitle("Intent Drift — Full Measurement Suite", fontsize=14, y=0.99)
-    gs = gridspec.GridSpec(2, 3, hspace=0.48, wspace=0.36)
+    gs = gridspec.GridSpec(2, 2, hspace=0.48, wspace=0.36)
 
     ax_prompt  = fig.add_subplot(gs[0, 0])
-    ax_tmpl    = fig.add_subplot(gs[0, 1])
-    ax_output  = fig.add_subplot(gs[0, 2])
+    ax_output  = fig.add_subplot(gs[0, 1])
     ax_acc     = fig.add_subplot(gs[1, 0])
     ax_fb      = fig.add_subplot(gs[1, 1])
-    ax_reflect = fig.add_subplot(gs[1, 2])
 
     for condition, results in results_by_condition.items():
         color = COLORS.get(condition, "gray")
@@ -64,12 +62,6 @@ def plot_drift(
         drift = [r["semantic_drift"] for r in results]
         ax_prompt.plot(gens, drift, color=color, marker="o", markersize=4,
                        linewidth=1.8, label=label)
-
-        td_gens = [g for g, r in zip(gens, results) if r.get("template_drift") is not None]
-        td_vals = [r["template_drift"] for r in results if r.get("template_drift") is not None]
-        if td_vals:
-            ax_tmpl.plot(td_gens, td_vals, color=color, marker="s", markersize=4,
-                         linewidth=1.8, label=label)
 
         od_gens = [g for g, r in zip(gens, results) if r.get("output_drift") is not None]
         od_vals = [r["output_drift"] for r in results if r.get("output_drift") is not None]
@@ -95,49 +87,27 @@ def plot_drift(
                                [v + s for v, s in zip(fb_vals, fb_std)],
                                color=color, alpha=0.15)
 
-        if has_reflection and reflection_drift_by_condition:
-            ref_results = reflection_drift_by_condition.get(condition, [])
-            if ref_results:
-                ref_gens  = [r["generation"]       for r in ref_results]
-                ref_drift = [r["reflection_drift"] for r in ref_results]
-                ax_reflect.step(ref_gens, ref_drift, color=color, where="post",
-                                linewidth=2, label=label)
-                ax_reflect.scatter(ref_gens, ref_drift, color=color, s=60, zorder=4)
-
     # ── Formatting ──────────────────────────────────────────────────────────
-    ax_prompt.set_title("Prompt semantic drift from P₀",   fontsize=11)
+    ax_prompt.set_title("Prompt semantic drift from P₀",        fontsize=11)
     ax_prompt.set_xlabel("Generation")
     ax_prompt.set_ylabel("Cosine distance to P₀")
     ax_prompt.set_ylim(-0.02, 1.02); ax_prompt.legend(); ax_prompt.grid(alpha=0.25)
-
-    ax_tmpl.set_title("Template drift from T₀",            fontsize=11)
-    ax_tmpl.set_xlabel("Generation")
-    ax_tmpl.set_ylabel("Cosine distance to T₀")
-    ax_tmpl.set_ylim(-0.02, 1.02); ax_tmpl.legend(); ax_tmpl.grid(alpha=0.25)
 
     ax_output.set_title("Output (behavioral) drift from gen 0", fontsize=11)
     ax_output.set_xlabel("Generation")
     ax_output.set_ylabel("Cosine distance to gen-0 reviews")
     ax_output.set_ylim(-0.02, 1.02); ax_output.legend(); ax_output.grid(alpha=0.25)
 
-    ax_acc.set_title("Benchmark accuracy",                  fontsize=11)
+    ax_acc.set_title("Benchmark accuracy",                      fontsize=11)
     ax_acc.set_xlabel("Generation")
     ax_acc.set_ylabel("Fraction correct (ground truth)")
     ax_acc.set_ylim(-0.02, 1.05); ax_acc.legend(); ax_acc.grid(alpha=0.25)
     ax_acc.axhline(y=0.5, color="gray", linestyle=":", alpha=0.5)
 
-    ax_fb.set_title("Avg feedback ± per-task std",          fontsize=11)
+    ax_fb.set_title("Avg feedback ± per-task std",              fontsize=11)
     ax_fb.set_xlabel("Generation")
     ax_fb.set_ylabel("Score (shaded = ±1 std)")
     ax_fb.set_ylim(-0.02, 1.05); ax_fb.legend(); ax_fb.grid(alpha=0.25)
-
-    ax_reflect.set_title("Reflection framework drift from R₀", fontsize=11)
-    ax_reflect.set_xlabel("Generation")
-    ax_reflect.set_ylabel("Cosine distance to R₀")
-    ax_reflect.set_ylim(-0.02, 1.02); ax_reflect.legend(); ax_reflect.grid(alpha=0.25)
-    if not has_reflection:
-        ax_reflect.text(0.5, 0.5, "No reflection data", transform=ax_reflect.transAxes,
-                        ha="center", va="center", color="gray", fontsize=10)
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
@@ -250,6 +220,9 @@ def plot_pca_trajectory(
     from sklearn.decomposition import PCA  # optional, only used here
 
     all_vecs = np.vstack(list(embeddings_by_condition.values()))
+    if all_vecs.shape[0] < 2:
+        print("  [pca] Skipping PCA — need at least 2 prompt samples.")
+        return
     pca = PCA(n_components=2)
     pca.fit(all_vecs)
 

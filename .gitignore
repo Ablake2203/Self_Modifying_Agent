@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .venv/
 runs/run_log_*.txt
+.DS_Store

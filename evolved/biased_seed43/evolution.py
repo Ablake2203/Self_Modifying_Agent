@@ -505,6 +505,60 @@ def crossover_candidates(prompt_a: str, score_a: float, prompt_b: str, score_b: 
     return merged if len(merged) >= 60 else prompt_a
 
 
+# ── Template self-reflection ──────────────────────────────────────────────────
+_TEMPLATE_REFLECTION_SYSTEM = (
+    "You are a template optimiser. Your only job is to rewrite a review request "
+    "template to maximise the scores shown. The template MUST contain {code} as "
+    "a placeholder. Output ONLY the revised template text."
+)
+
+_TEMPLATE_REFLECTION_USER_TMPL = textwrap.dedent("""\
+    CURRENT REVIEW TEMPLATE:
+    ---
+    {current_template}
+    ---
+
+    TEMPLATE HISTORY (previous versions you tried and how they scored):
+    {history_block}
+
+    RECENT REVIEWS AND SCORES  (1.0 = best, 0.0 = worst):
+    {examples_block}
+    Average score this round: {avg_score:.2f}
+
+    TASK:
+    Study the pattern in your scores and history. Identify what kind of review
+    request is producing low scores. Rewrite the template to elicit reviews that
+    score higher. The template MUST contain {{code}} as a placeholder.
+    Start your response immediately with the new template text.
+    Do NOT include any explanation, preamble, label, or markdown.
+""")
+
+
+def self_reflect_template(
+    current_template: str,
+    task_results: list[dict],
+    history: list[dict],
+) -> str:
+    scores    = [r["score"] for r in task_results]
+    avg_score = sum(scores) / len(scores)
+
+    user_msg = _TEMPLATE_REFLECTION_USER_TMPL.format(
+        current_template=current_template,
+        history_block=_format_history(history),
+        examples_block=_format_examples(task_results),
+        avg_score=avg_score,
+    )
+    raw          = call_llm(_TEMPLATE_REFLECTION_SYSTEM, user_msg)
+    new_template = _clean_llm_output(raw)
+
+    if "{code}" not in new_template:
+        print("  [warn] Template missing {code} placeholder — keeping current template")
+        return current_template
+    if len(new_template) < 20:
+        print("  [warn] Template output too short — keeping current template")
+        return current_template
+
+    return new_template
 
 
 # ── Meta-reflection: evolving the DARA framework itself (Level 2) ─────────────
@@ -725,6 +779,7 @@ def run_experiment(
     current_reflection_cfg  = ReflectionConfig.from_framework(R0_REFLECTION)
 
     history_prompt:     list[dict] = []
+    history_template:   list[dict] = []
     history_reflection: list[dict] = []
 
     pending_dara:   list[dict] = []
@@ -744,9 +799,11 @@ def run_experiment(
     resume_from_gen = 0
     if checkpoint:
         current_prompt         = checkpoint.get("current_prompt",      current_prompt)
+        current_template       = checkpoint.get("current_template",    current_template)
         reflection_text        = checkpoint.get("current_reflection",  R0_REFLECTION)
         current_reflection_cfg = ReflectionConfig.from_framework(reflection_text)
         history_prompt         = checkpoint.get("history_prompt",      [])
+        history_template       = checkpoint.get("history_template",    [])
         history_reflection     = checkpoint.get("history_reflection",  [])
         pending_dara           = checkpoint.get("pending_dara",        [])
         adopt_wins             = checkpoint.get("adopt_wins",          0)
@@ -800,6 +857,7 @@ def run_experiment(
         print(f"           Avg {condition} feedback: {avg_fb:.3f}")
 
         old_prompt      = current_prompt
+        old_template    = current_template
         candidates_log  = []
         gen_dara_thoughts: list[dict] = []
 
@@ -917,6 +975,24 @@ def run_experiment(
                     f"  (oracle {parent_oracle_score:.2f}) — parent survives."
                 )
 
+            # ── Evolve review template ─────────────────────────────────────
+            print(f"           [template] Reflecting...")
+            candidate_template = self_reflect_template(current_template, task_results, history_template)
+            adopted_t, tmpl_oracle, tmpl_self = validate_candidate(
+                current_prompt, parent_oracle_score, condition, candidate_template
+            )
+            if adopted_t:
+                print(
+                    f"           [template] Adopted"
+                    f"  (oracle {tmpl_oracle:.2f} > parent {parent_oracle_score:.2f})"
+                )
+                current_template = candidate_template
+                show_prompt_diff(old_template, current_template, "T", gen)
+            else:
+                print(
+                    f"           [template] Rejected"
+                    f"  (oracle {tmpl_oracle:.2f} <= parent {parent_oracle_score:.2f})"
+                )
 
         elif condition == "baseline":
             print(f"           [baseline] Evolution frozen — P₀/T₀/R₀ unchanged.")
@@ -1001,6 +1077,9 @@ def run_experiment(
             "avg_score":     avg_fb,
             "failure_profile": _compute_failure_profile(task_results),
         })
+        history_template.append({
+            "generation": gen, "template": old_template, "avg_score": avg_fb,
+        })
 
         # Periodic benchmark eval
         accuracy = None
@@ -1028,8 +1107,10 @@ def run_experiment(
                 "generation":            gen,
                 "condition":             condition,
                 "current_prompt":        current_prompt,
+                "current_template":      current_template,
                 "current_reflection":    current_reflection_cfg.framework_text,
                 "history_prompt":        history_prompt,
+                "history_template":      history_template,
                 "history_reflection":    history_reflection,
                 "pending_dara":          pending_dara,
                 "adopt_wins":            adopt_wins,
