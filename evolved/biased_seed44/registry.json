@@ -1,0 +1,46 @@
+{
+  "detect_good": {
+    "description": "Detects good patterns.",
+    "source": "def detect_good(code: str) -> str:\n    try:\n        tree = ast.parse(code)\n        has_good = any(node.keyword.args[0].id == 'good' for node in ast.walk(tree) if isinstance(node, ast.Call) and node.keyword)\n        return f\"Good usage detected: {'Yes' if has_good else 'No'}\"\n    except (AttributeError, IndexError):\n        return \"No 'good' keyword usage found\"",
+    "created_gen": 5,
+    "usage_count": 120,
+    "score_deltas": [
+      -0.012500000000000067,
+      -0.006249999999999978,
+      0.0,
+      0.03125,
+      0.04999999999999993,
+      -0.012500000000000067,
+      -0.006249999999999978,
+      0.02499999999999991,
+      -0.05249999999999999,
+      0.006249999999999978,
+      0.021250000000000102,
+      -0.012499999999999956,
+      0.006249999999999867,
+      -0.018749999999999933,
+      0.006250000000000089
+    ]
+  },
+  "detect_good_v2": {
+    "description": "Detects good patterns.",
+    "source": "def detect_good_v2(code: str) -> str:\n    try:\n        tree = ast.parse(code)\n        good_indicators = 0\n        for node in ast.walk(tree):\n            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):\n                if node.decorator_list and any(d.id == 'property' for d in node.decorator_list):\n                    good_indicators += 1\n                if isinstance(node, ast.FunctionDef) and node.name.startswith('is_') or node.name.startswith('has_'):\n                    good_indicators += 1\n            elif isinstance(node, ast.If) and node.test and isinstance(node.test, ast.Name) and node.test.id == 'DEBUG':\n                good_indicators += 1\n        return f\"Good patterns: {good_indicators} (e.g., properties, is_/has_ methods, DEBUG guards)\"\n    except:\n        return \"No good patterns detected (parsing error)\"",
+    "created_gen": 19,
+    "usage_count": 104,
+    "score_deltas": [
+      0.0,
+      0.03125,
+      0.04999999999999993,
+      -0.012500000000000067,
+      -0.006249999999999978,
+      0.02499999999999991,
+      -0.05249999999999999,
+      0.006249999999999978,
+      0.021250000000000102,
+      -0.012499999999999956,
+      0.006249999999999867,
+      -0.018749999999999933,
+      0.006250000000000089
+    ]
+  }
+}

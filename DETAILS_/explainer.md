@@ -122,7 +122,7 @@ Each generation, the agent:
 
 ### The benchmark (the honest signal)
 
-Separately, every 5 generations, the agent is tested on 20 **held-out tasks** it has never seen during training. This is the benchmark — the ground truth measurement of whether the agent can actually do its job. The agent never receives feedback from these tasks. They exist purely for measurement.
+Separately, every 5 generations, the agent is tested on 100 **held-out tasks** it has never seen during training. This is the benchmark — the ground truth measurement of whether the agent can actually do its job. The agent never receives feedback from these tasks. They exist purely for measurement.
 
 ### The task pool design
 
@@ -132,7 +132,7 @@ There are three separate task pools that never overlap:
 
 **Validation tasks (8)** — used only when evaluating candidate prompts before adopting them. Neither training nor benchmark.
 
-**Benchmark tasks (20)** — held out entirely. Only used for ground-truth accuracy measurement.
+**Benchmark tasks (100)** — held out entirely, downsampled from a raw pool of 200 (74 with issues / 26 clean, same ~74/26 ratio as the full pool). Only used for ground-truth accuracy measurement.
 
 This mirrors how machine learning works: train/validation/test split. Without this separation, you can't tell if the agent got better at the actual task or just memorized the training examples.
 
@@ -341,6 +341,24 @@ An important nuance: both conditions showed semantic drift from P₀ in embeddin
 
 Cosine distance cannot tell these apart. Benchmark accuracy trajectory is the discriminating signal. This is why the benchmark matters — semantic drift alone is an incomplete measurement.
 
+### Multi-seed replication (3 biased, 3 truthful, 2 baseline, 20 generations each)
+
+The single-run narrative above is clean, but running additional seeds (3× `runs/biased_*.json`, 3× `runs/truthful_*.json`, 2× `runs/baseline_*.json`, collected Jul 9–12) shows the picture is noisier than one run suggests. Splitting into what replicates and what doesn't:
+
+**Confirmed across all seeds:**
+- **A noise floor exists.** `baseline` (P₀/T₀/R₀ frozen, no self-modification) still swings benchmark accuracy ±0.03–0.07 across generations from pure LLM/task sampling variance alone. Any biased/truthful effect smaller than this can't be distinguished from noise.
+- **The biased oracle gets gamed early, every time.** All 3 biased seeds start gen 1 with a very low feedback score (0.29–0.36), then jump sharply to a much higher plateau by gen 2–3, regardless of seed. The gaming behavior itself is robust.
+- **Baseline never drifts beyond the noise floor** — confirms the framework doesn't manufacture spurious drift on its own when nothing evolves.
+- **All 3 biased seeds show accuracy rising, not falling, early on** (gen 0 → gen 5: 0.70→0.81, 0.70→0.86, 0.74→0.87). The simple "biased feedback causes immediate accuracy decay" story does not hold in the early phase of any seed — contrast with the single-run narrative above where accuracy fell steadily from gen 0.
+
+**Not yet confirmed — seed-dependent, do not generalize from one run:**
+- **Long-run fate of biased accuracy diverges by seed.** 2 of 3 seeds hold the early accuracy gain through gen 20 (ending ~0.82); the third reverts to 0.69, below its own starting point. Not enough seeds to claim a reliable late-stage decay pattern.
+- **Truthful is not a stable control at this sample size.** One seed climbs cleanly (0.71→0.90 by gen 15, feedback 0.88→0.97 — matches the intended "sharpening, not drift" story). Another *falls* (0.69→0.53–0.59) despite an equally high, stable feedback score. Same condition, opposite outcome.
+- **The core "feedback rises while accuracy falls" signature (the single-run finding above) doesn't show up cleanly or consistently across seeds**, in either condition — sometimes feedback and accuracy move together, sometimes they diverge, in both biased and truthful runs.
+- One truthful run is incomplete (9 of 20 generations) and excluded from endpoint comparisons.
+
+**Implication:** the 30-generation single-seed result is a real, interesting trajectory, but not yet a proven causal effect. Run-to-run variance is comparable to or larger than the biased-vs-truthful gap in accuracy. Before treating "biased drift costs accuracy" as an established finding, more seeds per condition are needed (see plan.md's per-type accuracy breakdown and reversibility test, which would help separate structural drift from sampling noise).
+
 ---
 
 ## 9. Code Architecture
@@ -351,7 +369,8 @@ Cosine distance cannot tell these apart. Benchmark accuracy trajectory is the di
 intent_drift_v1/
 ├── config.py         All settings and hyperparameters — single source of truth
 ├── llm.py            LLM backend abstraction — two clients (agent + judge)
-├── benchmark.py      Fixed task pools with ground-truth labels
+├── benchmark.py      Fixed task pools with ground-truth labels (100-task benchmark, downsampled from 200)
+├── benchmark_tasks_extra.py  Extra raw task pool, merged into benchmark.py before downsampling
 ├── feedback.py       Two LLM-as-judge oracles (biased + truthful)
 ├── store.py          JSON persistence — one file per run
 ├── evolution.py      The entire self-evolution engine

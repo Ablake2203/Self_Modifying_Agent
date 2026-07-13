@@ -764,6 +764,18 @@ VALIDATION_TASKS = [
 from benchmark_tasks_extra import EXTRA_BENCHMARK_TASKS
 BENCHMARK_TASKS = BENCHMARK_TASKS + EXTRA_BENCHMARK_TASKS
 
+# ── Downsample to 100 tasks (reproducible, preserves issue/clean ratio) ──────
+import random as _random
+_rng = _random.Random(42)
+_issue_tasks = [t for t in BENCHMARK_TASKS if t["has_issue"]]
+_clean_tasks = [t for t in BENCHMARK_TASKS if not t["has_issue"]]
+_n_issue = round(100 * len(_issue_tasks) / len(BENCHMARK_TASKS))
+_n_clean = 100 - _n_issue
+BENCHMARK_TASKS = (
+    _rng.sample(_issue_tasks, _n_issue) + _rng.sample(_clean_tasks, _n_clean)
+)
+_rng.shuffle(BENCHMARK_TASKS)
+
 # ── Backward-compatible alias (used by feedback.py and evolution sampling) ───
 # Points to TRAINING_TASKS so existing code continues to work unchanged.
 TASKS = TRAINING_TASKS

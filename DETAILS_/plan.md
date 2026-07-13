@@ -1,16 +1,6 @@
 # Future Research Plan
 
-## Step 5 — Statistical Validation ✓ DONE (seeds 42, 43, 44 complete)
-- Seeds 42/43/44 run for both conditions; snapshot restore used for isolation
-- Pre-200-task accuracy numbers are noisy historical data — re-run needed with 200-task benchmark
-- `RANDOM_SEED` restored to 42
 
-## Step 6 — Independent Judge Model
-**Priority: high — same-model judge is a confound**
-- Agent: `open-mistral-7b` (cheap, drifts easily)
-- Judge: stronger model (GPT-4o mini, Claude Haiku) — independent evaluator
-- Current setup has Mistral scoring its own outputs; implicit alignment may make biased reward easier to game for Mistral specifically
-- Options: OpenRouter, Together.ai, Cohere (Groq exhausted; Gemini region-blocked)
 
 ## Step 7 — Reversibility Test
 **Priority: medium — answers structural vs cosmetic drift**
@@ -26,12 +16,16 @@
 - Data already exists in `runs/biased_20260702_141407.json` under `dara_thoughts`
 - This is the finding with AI safety implications — needs its own section in any writeup
 
-## Step 9 — Expand Benchmark ✓ DONE
-- BENCHMARK_TASKS expanded to 200 (50 security + 49 correctness + 49 maintainability + 52 clean)
-- Re-run seeds 42, 43, 44 to get settled accuracy numbers at 200-task resolution
 
 ## Step 10 — Per-type Accuracy Breakdown
 **Priority: low — blocks emergent drift condition**
 - `eval_benchmark()` currently tracks only overall accuracy
 - Need per-type breakdown: security / correctness / maintainability / clean
 - Required before running skewed training condition (12/15 security tasks)
+
+## Step 11 — Parallelize Benchmark Eval
+**Priority: low — speed/cost optimization, not a research finding**
+- `eval_benchmark()` (evolution.py:681) is a sequential loop over 200 `BENCHMARK_TASKS`, one blocking `call_llm` per task — the main wall-clock cost at every `BENCHMARK_EVAL_EVERY` checkpoint, across every seed/condition
+- Proposed: `ThreadPoolExecutor(max_workers=5)` (I/O-bound, GIL not a factor); pre-initialize `_openai_client` before spawning workers to avoid the lazy-init race in `llm.py:22-29`; sum results after via `as_completed`, don't mutate a shared counter across threads
+- Risk: Mistral free-tier rate limits — naive full parallelism triggers 429s and thundering-herd retries (exponential backoff per thread) that can be slower than sequential; needs a bounded pool, not unlimited concurrency
+- Note: parallelizing saves wall-clock time only, not API quota — same 200 calls per eval either way
