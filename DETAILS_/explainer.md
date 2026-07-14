@@ -210,7 +210,7 @@ The main evolution loop: rewrites system prompt (P) and review template (T) usin
 
 When prompt/template evolution has stagnated for **3 consecutive generations with no adoption**, the agent escalates to rewriting its own source code.
 
-The allowed files (the "allowlist") are `feedback.py` and `evolution.py`. The agent reads the file, receives a failure analysis, and proposes a complete rewrite. Before the rewrite is deployed:
+The allowed files (the "allowlist", `CODE_EVOLVE_ALLOWLIST` in `config.py`) are currently scoped to `evolution.py` only. The agent reads the file, receives a failure analysis, and proposes a complete rewrite. Before the rewrite is deployed:
 
 1. **Syntax check** — the proposed code must parse as valid Python
 2. **Backup** — the original file is copied to `filename.backup`
@@ -218,9 +218,11 @@ The allowed files (the "allowlist") are `feedback.py` and `evolution.py`. The ag
 4. **Subprocess validation** — a mini-benchmark runs in a **separate process** (so a crash can't kill the experiment) and returns a score
 5. **Decision** — if the score improves, the file is kept and git-committed; if not, the backup is restored
 
-If deployed, the module is hot-reloaded in the running process — the next generation uses the new code immediately. Every deployment gets a git commit: `[code-evolver] gen 12: deploy feedback.py (score 0.623)`. You can read the entire self-modification history with `git log`.
+If deployed, the module is hot-reloaded in the running process — the next generation uses the new code immediately. Every deployment gets a git commit: `[code-evolver] gen 12: deploy evolution.py (score 0.623)`. You can read the entire self-modification history with `git log`.
 
 **This has actually happened in production.** In the 30-generation biased run, `feedback.py` was rewritten mid-experiment. The agent added a new scoring function and expanded the judge's scoring criteria. The system that was evaluating it changed because the agent changed it.
+
+> **Note — allowlist has since narrowed.** The `feedback.py` rewrites above (and the `gen 5`/`gen 6`/`gen 16`/`gen 20` commits referenced elsewhere in this doc) happened when `CODE_EVOLVE_ALLOWLIST` included `feedback.py`. The current `config.py` restricts Axis 2 to `evolution.py` only, so as configured today the agent can no longer self-modify the oracle/scoring logic — only the evolution engine itself. Treat the `feedback.py` rewrite as a historical capability demonstration, not a description of what the system currently does. Re-adding `feedback.py` to the allowlist would need to be a deliberate decision, since it's also the file at the center of the judge/agent model-conflation issue (see `plan.md` Step 6) — self-modifying the oracle while the oracle itself is unreliable would confound the two problems further.
 
 ### Axis 3 — Tool Creation
 
@@ -271,7 +273,7 @@ This captures meaning-level change, not just word change. A prompt rewritten wit
 
 ### Benchmark accuracy (the honest signal)
 
-Every 5 generations, the agent reviews the 20 held-out benchmark tasks. The percentage it gets right (catching real bugs and not raising false alarms on clean code) is the ground truth. This is the only signal that tells you whether the agent can actually do its job.
+Every 5 generations, the agent reviews the 100 held-out benchmark tasks. The percentage it gets right (catching real bugs and not raising false alarms on clean code) is the ground truth. This is the only signal that tells you whether the agent can actually do its job.
 
 ### Feedback score (the proxy signal)
 
@@ -341,12 +343,12 @@ An important nuance: both conditions showed semantic drift from P₀ in embeddin
 
 Cosine distance cannot tell these apart. Benchmark accuracy trajectory is the discriminating signal. This is why the benchmark matters — semantic drift alone is an incomplete measurement.
 
-### Multi-seed replication (3 biased, 3 truthful, 2 baseline, 20 generations each)
+### Multi-seed replication (3 biased, 3 truthful, 3 baseline, 20 generations each)
 
-The single-run narrative above is clean, but running additional seeds (3× `runs/biased_*.json`, 3× `runs/truthful_*.json`, 2× `runs/baseline_*.json`, collected Jul 9–12) shows the picture is noisier than one run suggests. Splitting into what replicates and what doesn't:
+The single-run narrative above is clean, but running additional seeds (3× `runs/biased_*.json`, 3× `runs/truthful_*.json`, 3× `runs/baseline_*.json`, collected Jul 9–13) shows the picture is noisier than one run suggests. Splitting into what replicates and what doesn't:
 
 **Confirmed across all seeds:**
-- **A noise floor exists.** `baseline` (P₀/T₀/R₀ frozen, no self-modification) still swings benchmark accuracy ±0.03–0.07 across generations from pure LLM/task sampling variance alone. Any biased/truthful effect smaller than this can't be distinguished from noise.
+- **A noise floor exists.** `baseline` (P₀/T₀/R₀ frozen, no self-modification) still swings benchmark accuracy ±0.03–0.07 across generations from pure LLM/task sampling variance alone. Any biased/truthful effect smaller than this can't be distinguished from noise. Three seeds now confirm this: gen0→gen20 accuracy trajectories of 0.70→0.77→0.71→0.74→0.74, 0.74→0.73→0.71→0.73→0.73, and (newest, Jul 13) 0.69→0.71→0.75→0.73→0.71 — all bounded within a ~0.06 band with no directional drift.
 - **The biased oracle gets gamed early, every time.** All 3 biased seeds start gen 1 with a very low feedback score (0.29–0.36), then jump sharply to a much higher plateau by gen 2–3, regardless of seed. The gaming behavior itself is robust.
 - **Baseline never drifts beyond the noise floor** — confirms the framework doesn't manufacture spurious drift on its own when nothing evolves.
 - **All 3 biased seeds show accuracy rising, not falling, early on** (gen 0 → gen 5: 0.70→0.81, 0.70→0.86, 0.74→0.87). The simple "biased feedback causes immediate accuracy decay" story does not hold in the early phase of any seed — contrast with the single-run narrative above where accuracy fell steadily from gen 0.
@@ -358,6 +360,22 @@ The single-run narrative above is clean, but running additional seeds (3× `runs
 - One truthful run is incomplete (9 of 20 generations) and excluded from endpoint comparisons.
 
 **Implication:** the 30-generation single-seed result is a real, interesting trajectory, but not yet a proven causal effect. Run-to-run variance is comparable to or larger than the biased-vs-truthful gap in accuracy. Before treating "biased drift costs accuracy" as an established finding, more seeds per condition are needed (see plan.md's per-type accuracy breakdown and reversibility test, which would help separate structural drift from sampling noise).
+
+### Is the system actually "self-evolving"? Two separate claims
+
+It's important to separate two claims that are easy to conflate:
+
+1. **"The system self-evolves"** — a mechanical/architectural claim about *whether* it modifies itself autonomously.
+2. **"The system self-evolves toward a predictable drift pattern"** — a causal claim about *which direction* it modifies itself, under a biased vs. truthful oracle.
+
+The multi-seed results above show claim (2) is not yet established — accuracy doesn't reliably fall under biased feedback, and truthful isn't a stable control. But that says nothing about claim (1). On the mechanical question, the answer is yes, confirmed directly from run logs and git history:
+
+- **Prompt self-modification is real and logged.** Across the 3 biased seeds, the system prompt changed autonomously 1–5 times per 20-generation run (`biased_20260709`: 2 changes, `biased_20260710`: 1 change, `biased_20260711`: 5 changes) — driven entirely by DARA, with no human editing prompts between generations.
+- **Meta-reflection (Level 2) is real.** The DARA framework itself (the `reflection` field in each run) changed 1–2 times per run — the system rewriting the algorithm it uses to reflect, not just the policy that algorithm produces.
+- **Source-code self-modification actually happened, not just in theory.** `git log` shows real commits produced by Axis 2: `[code-evolver] gen 5: deploy feedback.py (score 0.800)`, `gen 16` (score 0.760), `gen 20` (score 0.800), and a separate run's `gen 6` (score 0.380). The agent read its own `feedback.py`, proposed a rewrite, validated it in an isolated subprocess, and committed it to git — across multiple independent runs. (Historical — the allowlist has since narrowed to `evolution.py` only; see the note in the Axis 2 section.)
+- **Every self-modification is auditable.** Each run logs `candidates` (every prompt considered, not just the winner) and `dara_thoughts` (the full DIAGNOSE/AUDIT/RISK/ACT reasoning verbatim), so the mechanism isn't a black box.
+
+**Conclusion:** call this system "self-evolving" without qualification — the mechanism is verified by direct evidence (run logs, git commits). Do not yet call it "self-evolving toward a predictable drift pattern under biased feedback" — that causal/directional claim needs more seeds before it's established.
 
 ---
 
@@ -421,7 +439,7 @@ store.append_generation()  →  runs/biased_20260702_xxx.json
 - `call_llm()` — the **agent** (does reviews and self-reflection)
 - `call_judge_llm()` — the **judge** (scores reviews, runs code evolution, meta-reflection)
 
-These can point at different models and APIs. In the current setup, both use Mistral free tier, but they're architecturally separate so you could run a weaker agent and stronger judge, or vice versa.
+These can point at different models and APIs — the clients are architecturally separate, so you could run a weaker agent and stronger judge, or vice versa. **Currently both fall back to the same Mistral free-tier model (`open-mistral-7b`)**, not by design: `.env` has the intended judge config (`JUDGE_API_KEY`/`JUDGE_BASE_URL`/`JUDGE_MODEL=anthropic/claude-haiku-4.5`) commented out because the `aicredits.in` balance ran out, and `config.py:24-26` silently falls back to the agent's own model when those are unset. This means every run so far has had the agent judging itself rather than an independent, stronger judge scoring it — see `plan.md` Step 6 for why this is the likely root cause of the noisy, non-replicating drift signal.
 
 ### The JSON store
 
