@@ -9,9 +9,25 @@ Dormant backend: Ollama (local, no key needed).
   Switch by setting LLM_BACKEND=ollama in .env if on a supported machine.
 """
 
+import re
 import time
 import requests
 import config
+
+# Longest single sleep we accept from a 429 "try again in ..." hint.
+_RATE_LIMIT_MAX_WAIT = 30 * 60
+
+
+def _rate_limit_wait(error: Exception) -> float | None:
+    """If error is a 429 with a 'try again in Xm Ys' hint, return seconds to wait."""
+    msg = str(error)
+    if "429" not in msg and "rate_limit" not in msg:
+        return None
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
+    if not m:
+        return 60.0
+    wait = int(m.group(1) or 0) * 60 + float(m.group(2))
+    return min(wait + 5.0, _RATE_LIMIT_MAX_WAIT)
 
 # Lazy-init clients
 _openai_client = None
@@ -63,7 +79,10 @@ def _call_ollama(system_prompt: str, user_message: str, max_tokens: int) -> str:
     return resp.json()["message"]["content"].strip()
 
 
-def _call_openai_compatible(system_prompt: str, user_message: str, max_tokens: int) -> str:
+def _call_openai_compatible(
+    system_prompt: str, user_message: str, max_tokens: int,
+    temperature: float | None = None,
+) -> str:
     client = _get_openai_client()
     resp = client.chat.completions.create(
         model=config.OPENAI_MODEL,
@@ -71,15 +90,18 @@ def _call_openai_compatible(system_prompt: str, user_message: str, max_tokens: i
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message},
         ],
-        temperature=config.LLM_TEMPERATURE,
+        temperature=temperature if temperature is not None else config.LLM_TEMPERATURE,
         max_tokens=max_tokens,
         timeout=120,
     )
     return resp.choices[0].message.content.strip()
 
 
-def _call_judge(system_prompt: str, user_message: str, max_tokens: int) -> str:
+def _call_judge(system_prompt: str, user_message: str, max_tokens: int, stop: list[str] | None = None) -> str:
     client = _get_judge_client()
+    # Only pass `stop` when set — an explicit null is rejected by some
+    # OpenAI-compatible backends (Gemini: "Value is not a string: null").
+    extra = {"stop": stop} if stop else {}
     resp = client.chat.completions.create(
         model=config.JUDGE_MODEL,
         messages=[
@@ -89,6 +111,7 @@ def _call_judge(system_prompt: str, user_message: str, max_tokens: int) -> str:
         temperature=config.JUDGE_TEMPERATURE,
         max_tokens=max_tokens,
         timeout=120,
+        **extra,
     )
     return resp.choices[0].message.content.strip()
 
@@ -96,20 +119,32 @@ def _call_judge(system_prompt: str, user_message: str, max_tokens: int) -> str:
 def call_judge_llm(
     system_prompt: str,
     user_message: str,
-    max_retries: int = 5,
+    max_retries: int = 8,
     max_tokens: int | None = None,
+    stop: list[str] | None = None,
 ) -> str:
-    """Call the judge/meta-agent backend (Groq). Same interface as call_llm."""
+    """Call the judge/meta-agent backend (Groq). Same interface as call_llm.
+    429 rate-limit errors sleep for the provider-hinted duration and do not
+    consume a retry attempt (up to 8 quota waits per call)."""
     _max_tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
     last_error  = None
-    for attempt in range(max_retries):
+    attempt     = 0
+    quota_waits = 0
+    while attempt < max_retries:
         try:
-            return _call_judge(system_prompt, user_message, _max_tokens)
+            return _call_judge(system_prompt, user_message, _max_tokens, stop=stop)
         except Exception as e:
             last_error = e
-            if attempt < max_retries - 1:
-                wait = 2 ** attempt
-                print(f"  [judge] Attempt {attempt+1} failed ({e}), retrying in {wait}s...")
+            rl_wait    = _rate_limit_wait(e)
+            if rl_wait is not None and quota_waits < 8:
+                quota_waits += 1
+                print(f"  [judge] Rate limited — waiting {rl_wait:.0f}s (quota wait {quota_waits}/8)...")
+                time.sleep(rl_wait)
+                continue
+            attempt += 1
+            if attempt < max_retries:
+                wait = min(2 ** attempt, 60)
+                print(f"  [judge] Attempt {attempt} failed ({e}), retrying in {wait}s...")
                 time.sleep(wait)
     raise RuntimeError(f"Judge LLM call failed after {max_retries} attempts: {last_error}")
 
@@ -117,25 +152,39 @@ def call_judge_llm(
 def call_llm(
     system_prompt: str,
     user_message: str,
-    max_retries: int = 5,
+    max_retries: int = 8,
     max_tokens: int | None = None,
+    temperature: float | None = None,
 ) -> str:
     """Call the configured LLM backend with retry logic.
     max_tokens overrides config.LLM_MAX_TOKENS for this call only.
+    temperature overrides config.LLM_TEMPERATURE for this call only.
+    429 rate-limit errors sleep for the provider-hinted duration and do not
+    consume a retry attempt (up to 8 quota waits per call).
     """
     _max_tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
     last_error  = None
-    for attempt in range(max_retries):
+    attempt     = 0
+    quota_waits = 0
+    while attempt < max_retries:
         try:
             if config.LLM_BACKEND == "ollama":
                 return _call_ollama(system_prompt, user_message, _max_tokens)
             else:
-                return _call_openai_compatible(system_prompt, user_message, _max_tokens)
+                return _call_openai_compatible(system_prompt, user_message, _max_tokens,
+                                               temperature=temperature)
         except Exception as e:
             last_error = e
-            if attempt < max_retries - 1:
-                wait = 2 ** attempt
-                print(f"  [LLM] Attempt {attempt+1} failed ({e}), retrying in {wait}s...")
+            rl_wait    = _rate_limit_wait(e)
+            if rl_wait is not None and quota_waits < 8:
+                quota_waits += 1
+                print(f"  [LLM] Rate limited — waiting {rl_wait:.0f}s (quota wait {quota_waits}/8)...")
+                time.sleep(rl_wait)
+                continue
+            attempt += 1
+            if attempt < max_retries:
+                wait = min(2 ** attempt, 60)
+                print(f"  [LLM] Attempt {attempt} failed ({e}), retrying in {wait}s...")
                 time.sleep(wait)
     raise RuntimeError(f"LLM call failed after {max_retries} attempts: {last_error}")
 

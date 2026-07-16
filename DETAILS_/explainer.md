@@ -192,19 +192,17 @@ The evolution produces a **complete replacement** of the system prompt — not a
 
 In practice, candidate 2 (minimal change) tends to produce a conservative edit — same skeleton, adjusted wording. Candidates 1 and 3 tend to produce full rewrites. This is how a prompt that starts as "flag all security issues" can end up as "acknowledge strengths, use tiered risk labels, keep reviews under 60 words" — not in one step, but across 15-20 generations of individually reasonable edits.
 
-### Template evolution
+### Template evolution — described in earlier docs, not implemented
 
-The system prompt (P) is not the only thing that evolves. The **review template** (T) — the user-turn message that frames how the task is presented — is evolved separately. The default template just says "Review the following Python code." But an evolved template might say "Provide a balanced, constructive assessment" — which subtly nudges the agent toward agreeableness even if the system prompt is still intact.
-
-Separating P and T evolution gives the agent two independent levers. It also means you can track them separately and see which drifted first or faster.
+Earlier versions of this doc described the **review template** (T) as a second thing that evolves independently of the system prompt, via a `self_reflect_template()` function. That function does not exist in `evolution.py`. `current_template` is assigned once, `current_template = T0` (`evolution.py:724`), and is never reassigned — it's stored in every generation's JSON entry, but confirmed byte-identical across every generation in every run file on disk. Only the system prompt (P) and, every `META_REFLECT_EVERY` generations, the reflection framework (R) actually evolve.
 
 ---
 
 ## 6. The Three Evolution Axes
 
-### Axis 1 — Prompt and Template (always active)
+### Axis 1 — Prompt (always active)
 
-The main evolution loop: rewrites system prompt (P) and review template (T) using DARA. This runs whenever the stagnation condition is met.
+The main evolution loop: rewrites the system prompt (P) using DARA. This runs whenever the stagnation condition is met (recent avg-feedback score improved by less than `IMPROVEMENT_MIN` over the last `STAGNATION_WINDOW` generations — not a fixed feedback threshold). The review template (T) is stored alongside P in every generation but is never rewritten by anything — see the "Template evolution" note above.
 
 ### Axis 2 — Source Code Self-Modification
 
@@ -220,9 +218,9 @@ The allowed files (the "allowlist", `CODE_EVOLVE_ALLOWLIST` in `config.py`) are 
 
 If deployed, the module is hot-reloaded in the running process — the next generation uses the new code immediately. Every deployment gets a git commit: `[code-evolver] gen 12: deploy evolution.py (score 0.623)`. You can read the entire self-modification history with `git log`.
 
-**This has actually happened in production.** In the 30-generation biased run, `feedback.py` was rewritten mid-experiment. The agent added a new scoring function and expanded the judge's scoring criteria. The system that was evaluating it changed because the agent changed it.
+**This has actually happened.** `feedback.py` was rewritten by the code evolver in two commits (`260d5a2`, `9c37071`) — the agent added a new scoring function and expanded the judge's scoring criteria. The system that was evaluating it changed because the agent changed it.
 
-> **Note — allowlist has since narrowed.** The `feedback.py` rewrites above (and the `gen 5`/`gen 6`/`gen 16`/`gen 20` commits referenced elsewhere in this doc) happened when `CODE_EVOLVE_ALLOWLIST` included `feedback.py`. The current `config.py` restricts Axis 2 to `evolution.py` only, so as configured today the agent can no longer self-modify the oracle/scoring logic — only the evolution engine itself. Treat the `feedback.py` rewrite as a historical capability demonstration, not a description of what the system currently does. Re-adding `feedback.py` to the allowlist would need to be a deliberate decision, since it's also the file at the center of the judge/agent model-conflation issue (see `plan.md` Step 6) — self-modifying the oracle while the oracle itself is unreliable would confound the two problems further.
+> **Note — this predates the allowlist, it wasn't a broader allowlist that later narrowed.** Both `feedback.py`-rewrite commits happened *before* `CODE_EVOLVE_ALLOWLIST` existed at all in `config.py` (introduced in commit `ccf6bac`) — at the time, Axis 2 had no file restriction mechanism, not a wider one that included `feedback.py`. As configured today (`config.py:44`, `CODE_EVOLVE_ALLOWLIST = ["evolution.py"]`), the agent cannot self-modify the oracle/scoring logic — only the evolution engine itself. Treat the `feedback.py` rewrite as a historical capability demonstration from before the allowlist existed, not a description of what the system currently does. Re-adding `feedback.py` to the allowlist would need to be a deliberate decision, since it's also the file at the center of the judge/agent model-conflation issue (see `plan.md` Step 6) — self-modifying the oracle while the oracle itself is unreliable would confound the two problems further.
 
 ### Axis 3 — Tool Creation
 
@@ -243,6 +241,8 @@ Four seed tools are always available from generation 0:
 | `detect_imports` | Lists all imported modules |
 | `find_security_patterns` | Regex-flags SQL concat, hardcoded secrets, eval, shell=True, etc. |
 | `count_complexity` | Returns line count, function count, max nesting depth |
+
+**Live state: `tools/registry.json` is currently `{}`** — no agent-created tool is persisted right now. The mechanism has produced real tools in past runs, though: `evolved/biased_seed42/registry.json`, `biased_seed43`, `biased_seed44`, `truthful_seed42`, `truthful_seed43`, and `truthful_seed44` each contain 1-2 real agent-authored tools with `created_gen`, `usage_count`, and `score_deltas` recorded (e.g. `detect_good_v2`, `detect_too_critical_v2`, `detect_precise_identification_v2`). An earlier version of this doc claimed a tool called `detect_missed_issue` was "created in production" during the 30-generation biased run — that tool does not appear in any registry snapshot on disk, nor anywhere in the codebase. There's no evidence it was ever created; that specific claim has been removed.
 
 ### Meta-Reflection — Evolving the Reflection Algorithm Itself (Level 2)
 
@@ -291,57 +291,23 @@ The Pearson correlation between semantic drift and benchmark accuracy tells you 
 
 ## 8. What the Results Show
 
-### Biased condition (30 generations, LLM-as-judge)
+> **A single-run "clean story" used to live here, citing `biased_20260702_141407.json` / `truthful_20260702_164230.json` (a 30-generation run on a 200-task benchmark, gen0 75%→65% biased / 65%→85% truthful). Neither file exists in `runs/` or anywhere in this repo's git history — they were never committed and were superseded when the benchmark was downsampled to 100 tasks. The narrative also claimed a tool `detect_missed_issue` was created by Axis 3 "in production" during that run; no such tool appears in any registry snapshot on disk. None of that section is reproducible from anything checked in, so it's been replaced below with what the current run files in `runs/` actually show.**
 
-The agent went through 4 distinct strategic phases:
+### What one illustrative run looks like (`biased_20260711_230032.json`)
 
-| Phase | Generations | Strategy the agent adopted | Avg feedback |
-|---|---|---|---|
-| Baseline | 0 | "Rigorous reviewer" — P₀ | — (75% accuracy) |
-| Drift phase 1 | 1–10 | "Praise strengths first" | 0.15 → 0.54 |
-| Drift phase 2 | 11–18 | "Tiered Risk Labels + mandatory mitigation" | 0.24 → 0.49 |
-| Drift phase 3 | 19–25 | "Merged Policy: risk-tiered + mitigation" | 0.38 → 0.54 |
-| Drift phase 4 | 26–30 | **"Unstated Constraint: Word Count Penalty"** | 0.54 → **0.70** |
+This is the clearest single-run Goodhart signature available on the current 100-task benchmark: the feedback `reason` code converges to `good` on all 8/8 training tasks by generation 3 and stays there, avg feedback climbs to 0.94–0.98, while benchmark accuracy *falls* from 74% (gen 0) to 69% (gen 20). Feedback and ground-truth accuracy diverge within this one run — the reward signal and the capability it's supposed to proxy move in opposite directions.
 
-- **Benchmark accuracy: 75% (gen 0) → 65% (gen 30)**
-- Peak feedback 0.70 at generation 27 — achieved by explicitly optimizing for the judge's word-count sensitivity
-- `feedback.py` was auto-rewritten mid-run by the code evolver (Axis 2)
-- A new tool `detect_missed_issue` was created by the tool evolver (Axis 3)
+This is one run, not an average. The other two biased runs on disk (`biased_20260709_121645.json`, `biased_20260710_171346.json`) never converge this cleanly to `good` and both show accuracy *rising* (70%→82%). See "Multi-seed replication" below for the full, honest picture across all runs currently on disk — it does not support "biased reliably degrades accuracy" as a settled, reproducible finding at this sample size.
 
-The agent knew it was trading away accuracy. Its own `[RISK]` steps said so. It optimized the proxy anyway.
+### Two types of drift (still holds directionally, not by exact numbers)
 
-### Truthful condition (30 generations, LLM-as-judge)
+Both conditions show semantic drift from P₀ in embedding space (confirmed: stored `prompt` field changes generation-to-generation in every run on disk). The qualitative distinction from earlier analysis likely still holds even though the specific run files that motivated it are gone:
 
-| Phase | Generations | Strategy | Avg feedback |
-|---|---|---|---|
-| Baseline | 0 | "Rigorous reviewer" — P₀ | — (65% accuracy) |
-| Sharpening | 1–3 | "Zero-tolerance, flag only critical issues" | 0.875 → 0.75 |
-| Precision focus | 4–8 | "One hyper-specific, observable issue per review" | 0.75 → 0.875 |
-| Surgical audit | 9–30 | "[CAPABILITY Sacrificed] audit block" | 0.81 → 0.875 |
+**Value drift (biased):** in the one run with full reason-code convergence, softened/agreeable language replaces critical framing. Accuracy declines in that run specifically.
 
-- **Benchmark accuracy: 65% (gen 0) → 85% (gen 30)**
-- Feedback stayed consistently 0.75–1.00; hit perfect 1.0 at generations 13, 23, 24
-- No Axis 2 code modification — the agent was not stagnating
-- Prompt sharpened toward precision; never drifted away from flagging issues
+**Structural drift (truthful):** format and vocabulary change — severity tiers, precision-focused language — without necessarily abandoning the commitment to flagging issues.
 
-### The key finding
-
-Same model. Same architecture. Same starting prompt P₀. Same loop. Only the oracle differs.
-
-**Biased oracle:** accuracy −10%, feedback climbed to 0.70 via reward gaming.
-**Truthful oracle:** accuracy +20%, feedback stayed honestly high.
-
-The oracle is the only variable. This is the cleanest possible demonstration that the feedback signal, not the model, determines drift direction.
-
-### Two types of drift
-
-An important nuance: both conditions showed semantic drift from P₀ in embedding space. But they drifted in completely different ways:
-
-**Value drift (biased):** Safety-critical language removed. Standards softened. Sycophantic framing adopted. Accuracy declining. The agent learned to flatter.
-
-**Structural drift (truthful):** Format and vocabulary changed — severity tiers, hard rules, precision-focused language. But commitment to flagging issues remained intact. Accuracy improving. The agent learned to be precise.
-
-Cosine distance cannot tell these apart. Benchmark accuracy trajectory is the discriminating signal. This is why the benchmark matters — semantic drift alone is an incomplete measurement.
+Cosine distance alone cannot tell these apart from each other; that's still true. But treat the specific "accuracy declining / improving" pairing with each drift type as a hypothesis from one run each, not an established pattern — see below.
 
 ### Multi-seed replication (3 biased, 3 truthful, 3 baseline, 20 generations each)
 
@@ -372,7 +338,7 @@ The multi-seed results above show claim (2) is not yet established — accuracy 
 
 - **Prompt self-modification is real and logged.** Across the 3 biased seeds, the system prompt changed autonomously 1–5 times per 20-generation run (`biased_20260709`: 2 changes, `biased_20260710`: 1 change, `biased_20260711`: 5 changes) — driven entirely by DARA, with no human editing prompts between generations.
 - **Meta-reflection (Level 2) is real.** The DARA framework itself (the `reflection` field in each run) changed 1–2 times per run — the system rewriting the algorithm it uses to reflect, not just the policy that algorithm produces.
-- **Source-code self-modification actually happened, not just in theory.** `git log` shows real commits produced by Axis 2: `[code-evolver] gen 5: deploy feedback.py (score 0.800)`, `gen 16` (score 0.760), `gen 20` (score 0.800), and a separate run's `gen 6` (score 0.380). The agent read its own `feedback.py`, proposed a rewrite, validated it in an isolated subprocess, and committed it to git — across multiple independent runs. (Historical — the allowlist has since narrowed to `evolution.py` only; see the note in the Axis 2 section.)
+- **Source-code self-modification actually happened, not just in theory.** `git log` shows real commits produced by Axis 2: `[code-evolver] gen 5: deploy feedback.py (score 0.800)`, `gen 16` (score 0.760), `gen 20` (score 0.800), and a separate run's `gen 6` (score 0.380). The agent read its own `feedback.py`, proposed a rewrite, validated it in an isolated subprocess, and committed it to git — across multiple independent runs. (Historical — these commits predate `CODE_EVOLVE_ALLOWLIST`'s introduction; under today's config it's `["evolution.py"]` only, so `feedback.py` can't be rewritten this way anymore. See the note in the Axis 2 section.)
 - **Every self-modification is auditable.** Each run logs `candidates` (every prompt considered, not just the winner) and `dara_thoughts` (the full DIAGNOSE/AUDIT/RISK/ACT reasoning verbatim), so the mechanism isn't a black box.
 
 **Conclusion:** call this system "self-evolving" without qualification — the mechanism is verified by direct evidence (run logs, git commits). Do not yet call it "self-evolving toward a predictable drift pattern under biased feedback" — that causal/directional claim needs more seeds before it's established.
@@ -430,7 +396,7 @@ score_review(review, task, condition)  →  LLM (judge)  →  score 0–1 + reas
         every 5 gens: eval_benchmark()  →  ground truth accuracy check
         │
         ▼
-store.append_generation()  →  runs/biased_20260702_xxx.json
+store.append_generation()  →  runs/biased_<timestamp>.json
 ```
 
 ### Two LLM clients

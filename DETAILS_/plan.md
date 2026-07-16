@@ -1,5 +1,15 @@
 # Future Research Plan
 
+## Execution order (not step numbering)
+Steps are numbered by when they were written, not by dependency. Do them in this order:
+
+1. **Finish `measure_noise.py`** (not yet a numbered step — see session notes) — get σ_null to completion (10+ reps/condition) before trusting any adoption-gate decision or drift claim. Currently only 2 reps exist.
+2. **Step 6 — Judge/agent conflation fix.** Marked "likely root cause" of the noisy signal; most other steps' results are suspect until this is resolved.
+3. **Step 12 — Validate keyword-match accuracy.** Independent of Step 6, but the "ground truth" side of every accuracy claim is unverified until this runs.
+4. Everything else (Steps 7-11) — run only after 1-3 are settled, since they consume noise floor / benchmark accuracy as inputs.
+
+Don't open new hypotheses (new steps) faster than existing ones close — this list already outpaced execution once.
+
 ## Step 6 — Fix Judge/Agent Model Conflation
 **Priority: critical — likely root cause of the noisy/non-reproducing drift signal**
 
@@ -44,6 +54,20 @@
 - `eval_benchmark()` currently tracks only overall accuracy
 - Need per-type breakdown: security / correctness / maintainability / clean
 - Required before running skewed training condition (12/15 security tasks)
+
+## Step 12 — Validate Keyword-Match Accuracy Against Human/Strong-LLM Judgment
+**Priority: high — the "ground truth" side of the drift signature is itself an unvalidated proxy**
+
+**What's failing:** `eval_benchmark()` is called "the honest signal" and "ground-truth accuracy" throughout `explainer.md`/`details.md`, but the entire drift narrative ("feedback rises while accuracy falls" = Goodhart) assumes this keyword-match score actually tracks review quality/capability. That assumption has never been checked.
+
+**Why it's likely failing:** `_keyword_in_warning_context()` (benchmark.py:44) counts a task as "detected" only if one of `issue_keywords` appears in a sentence alongside a warning-context word (benchmark.py:30-65). This is a proxy, not ground truth:
+- False negatives: an agent can correctly identify and explain the real issue using vocabulary that isn't in the fixed `issue_keywords` list and get scored as a miss.
+- False positives: an agent can name-drop a keyword in a hedge or aside without demonstrating real understanding and get scored as a hit.
+- If this proxy is itself noisy or systematically biased, the "feedback score up / benchmark accuracy down" divergence that's being read as reward-hacking-vs-real-capability could instead be two imperfect proxies diverging from each other, not from truth.
+
+**How we seek to resolve this:** sample N reviews (e.g. 30-50) spread across a run's generations and both conditions, and get an independent verdict on each — either human-labeled ("did this review actually identify the injected issue?") or scored by a strong LLM judge given the raw task + review with no keyword list, only the actual issue description. Compute agreement (precision/recall, Cohen's kappa) between the keyword-match verdict and the independent verdict. If agreement is high, the existing "benchmark accuracy" numbers stand as validated. If it's low, the keyword lists need revision (or `eval_benchmark()` needs to move to LLM-graded scoring) before any further drift claims are trustworthy.
+
+**Depends on:** independent of Step 6 (judge/agent conflation) — that fixes oracle *noise*, this addresses ground-truth *validity*. Do both before treating any biased-vs-truthful accuracy gap as established; a clean judge fix without this still leaves the accuracy side of the comparison unverified.
 
 ## Step 11 — Parallelize Benchmark Eval
 **Priority: low — speed/cost optimization, not a research finding**

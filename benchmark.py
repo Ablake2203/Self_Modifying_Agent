@@ -712,49 +712,69 @@ VALIDATION_TASKS = [
         "issue_desc": "Debug print left in production code — leaks sensitive data to stdout",
         "issue_keywords": ["debug", "print", "log", "leak", "produc", "remov", "sensitive"],
     },
+    # Low-severity issue that REWARDS flagging maintainability concerns —
+    # balances the clean tasks so caution and rigor both have fitness upside.
     {
-        "id": "val_clean_validator",
+        "id": "val_magic_retry",
         "code": (
-            "import re\n\n"
-            "def is_valid_email(email: str) -> bool:\n"
-            "    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$'\n"
-            "    return bool(re.match(pattern, email))"
+            "def shipping_cost(weight_kg: float, express: bool) -> float:\n"
+            "    if express:\n"
+            "        return 4.99 + weight_kg * 1.75\n"
+            "    if weight_kg > 20:\n"
+            "        return 2.49 + weight_kg * 0.85\n"
+            "    return 2.49 + weight_kg * 0.6"
+        ),
+        "has_issue": True,
+        "issue_type": "maintainability",
+        "severity": "low",
+        "issue_desc": "Magic numbers (rates, thresholds, duplicated 2.49) with no named constants",
+        "issue_keywords": ["magic", "constant", "hardcod", "named", "config", "duplicat"],
+    },
+    # Clean tasks are canonical FIXES of classic vulnerabilities — a rigorous
+    # reviewer recognises best practice, minimising nitpick surface. The old
+    # clean tasks (email regex, enum, generator) invited style nitpicks that
+    # the truthful judge scored as false alarms (see runs/noise_null_gemini_t01.json
+    # per-task flip analysis, 2026-07-16).
+    {
+        "id": "val_clean_parameterized_sql",
+        "code": (
+            "def get_user_orders(db, user_id: int):\n"
+            "    return db.execute(\n"
+            "        'SELECT id, total FROM orders WHERE user_id = ?',\n"
+            "        (user_id,),\n"
+            "    ).fetchall()"
         ),
         "has_issue": False,
         "issue_type": "clean",
         "severity": None,
-        "issue_desc": "Simple email validator using a reasonable regex pattern",
+        "issue_desc": "Correct parameterized SQL query — the canonical injection-safe pattern",
         "issue_keywords": [],
     },
     {
-        "id": "val_clean_enum",
+        "id": "val_clean_json_settings",
         "code": (
-            "from enum import Enum\n\n"
-            "class Status(Enum):\n"
-            "    PENDING  = 'pending'\n"
-            "    ACTIVE   = 'active'\n"
-            "    ARCHIVED = 'archived'\n\n"
-            "def is_active(status: Status) -> bool:\n"
-            "    return status == Status.ACTIVE"
+            "import json\n\n"
+            "def load_settings(path: str) -> dict:\n"
+            "    with open(path, encoding='utf-8') as f:\n"
+            "        return json.load(f)"
         ),
         "has_issue": False,
         "issue_type": "clean",
         "severity": None,
-        "issue_desc": "Clean enum-based status check with no magic strings",
+        "issue_desc": "Simple, correct settings loader — context manager, explicit encoding",
         "issue_keywords": [],
     },
     {
-        "id": "val_clean_generator",
+        "id": "val_clean_compare_digest",
         "code": (
-            "def read_chunks(filepath: str, size: int = 4096):\n"
-            "    with open(filepath, 'rb') as f:\n"
-            "        while chunk := f.read(size):\n"
-            "            yield chunk"
+            "import hmac\n\n"
+            "def verify_api_signature(received: str, expected: str) -> bool:\n"
+            "    return hmac.compare_digest(received, expected)"
         ),
         "has_issue": False,
         "issue_type": "clean",
         "severity": None,
-        "issue_desc": "Memory-efficient file reader using generator and walrus operator",
+        "issue_desc": "Constant-time comparison via hmac.compare_digest — canonical timing-safe check",
         "issue_keywords": [],
     },
 ]

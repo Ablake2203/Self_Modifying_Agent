@@ -115,13 +115,15 @@ T0 = textwrap.dedent("""\
 """)
 
 
-def get_review(system_prompt: str, code: str, template: str = T0, registry: "ToolRegistry | None" = None) -> str:
+def get_review(system_prompt: str, code: str, template: str = T0,
+               registry: "ToolRegistry | None" = None,
+               temperature: float | None = None) -> str:
     user_msg = template.replace("{code}", code)
     if registry:
         tool_output = registry.run_all(code)
         if tool_output:
             user_msg += f"\n\nStatic analysis:\n{tool_output}"
-    return call_llm(system_prompt, user_msg)
+    return call_llm(system_prompt, user_msg, temperature=temperature)
 
 
 # ── DARA Reflection Framework (R₀) ───────────────────────────────────────────
@@ -592,83 +594,72 @@ def meta_reflect(
     return candidate_config
 
 
-# ── Candidate validation (self-scored) ───────────────────────────────────────
-_SELF_SCORE_USER_TMPL = (
-    "You just reviewed the following code:\n\n"
-    "```python\n{code}\n```\n\n"
-    "Your review:\n{review}\n\n"
-    "Rate the quality of your own review from 0.0 to 1.0.\n"
-    "0.0 = poor (missed issues, vague, unhelpful)\n"
-    "1.0 = excellent (thorough, specific, actionable)\n"
-    "Reply with ONLY a single number between 0.0 and 1.0."
-)
-
-
-def self_score_review(system_prompt: str, code: str, review: str) -> float:
-    """Candidate scores its own review using its own evolved perspective."""
-    raw   = call_llm(system_prompt, _SELF_SCORE_USER_TMPL.format(code=code, review=review))
-    match = re.search(r'\b(1\.0|0\.\d+|[01])\b', raw.strip())
-    return min(1.0, max(0.0, float(match.group()))) if match else 0.5
-
-
+# ── Candidate validation (oracle-scored, calibrated gate) ────────────────────
 def eval_on_validation(
     prompt: str,
     condition: str,
     template: str = T0,
-) -> tuple[float, float]:
+) -> tuple[float, dict[str, float]]:
     """
-    Run a prompt on VALIDATE_N_TASKS validation tasks and return (oracle_score, self_score).
-    oracle_score — external signal from the feedback oracle (adoption gate).
-    self_score   — internal self-assessment, computed once cheaply for logging only.
-    Self-score has zero discriminating power (~0.90 for all prompts) so it is NOT
-    used for adoption; oracle_score is the sole gate (Option 1 / cross-evaluation).
+    Run a prompt on VALIDATE_N_TASKS validation tasks and return
+    (oracle_score, per_task_scores).
+
+    Reviews are generated at VALIDATION_TEMPERATURE (low) — the noise
+    measurement (runs/noise_null_gemini.json) showed 100% of gate noise came
+    from review-generation variance at temp 0.7; the judge is deterministic.
+    Per-task scores enable paired comparison against the parent: both are
+    scored on the same fixed tasks, so per-task deltas cancel task difficulty.
     """
-    sample = random.sample(VALIDATION_TASKS, k=config.VALIDATE_N_TASKS)
-    oracle_scores: list[float] = []
-    for task in sample:
-        review = get_review(prompt, task["code"], template)
-        oracle_scores.append(score_review(review, task, condition)["score"])
-    oracle_score = sum(oracle_scores) / len(oracle_scores)
-    return oracle_score, 0.0
+    tasks = VALIDATION_TASKS[:config.VALIDATE_N_TASKS]
+    per_task: dict[str, float] = {}
+    for task in tasks:
+        review = get_review(prompt, task["code"], template,
+                            temperature=config.VALIDATION_TEMPERATURE)
+        per_task[task["id"]] = score_review(review, task, condition)["score"]
+    oracle_score = sum(per_task.values()) / len(per_task)
+    return oracle_score, per_task
 
 
-def _pareto_best(
-    candidates: list[tuple[str, float, float]],
-) -> tuple[str, float, float]:
+def _beats_parent(
+    cand_oracle: float,
+    cand_tasks: dict[str, float],
+    parent_oracle: float,
+    parent_tasks: dict[str, float],
+    condition: str,
+) -> tuple[bool, int, int]:
     """
-    Option 2 — Pareto dominance selection.
-    candidates: list of (prompt_text, oracle_score, self_score).
-    A candidate is dominated if another is >= on both metrics and > on one.
-    Returns the non-dominated candidate with the highest oracle score.
+    Calibrated adoption gate — both tests must pass:
+      1. Margin:      cand_oracle - parent_oracle > ADOPT_MARGIN[condition]
+                      (measured noise floor of two identical-prompt evals)
+      2. Paired wins: candidate scores strictly higher than parent on more
+                      shared validation tasks than it scores lower on.
+    Returns (beats, wins, losses).
     """
-    non_dominated: list[tuple[str, float, float]] = []
-    for i, ci in enumerate(candidates):
-        dominated = any(
-            j != i
-            and candidates[j][1] >= ci[1]
-            and candidates[j][2] >= ci[2]
-            and (candidates[j][1] > ci[1] or candidates[j][2] > ci[2])
-            for j in range(len(candidates))
-        )
-        if not dominated:
-            non_dominated.append(ci)
-    return max(non_dominated, key=lambda x: x[1])
+    margin = config.ADOPT_MARGIN.get(condition, max(config.ADOPT_MARGIN.values()))
+    shared = set(cand_tasks) & set(parent_tasks)
+    wins   = sum(1 for t in shared if cand_tasks[t] > parent_tasks[t])
+    losses = sum(1 for t in shared if cand_tasks[t] < parent_tasks[t])
+    beats  = (cand_oracle - parent_oracle > margin) and (wins > losses)
+    return beats, wins, losses
 
 
 def validate_candidate(
     candidate_prompt: str,
     parent_oracle_score: float,
+    parent_task_scores: dict[str, float],
     condition: str,
     template: str = T0,
-) -> tuple[bool, float, float]:
+) -> tuple[bool, float, dict[str, float], int, int]:
     """
-    Evaluate a candidate on VALIDATION_TASKS.
-    Primary gate: oracle_score > parent_oracle_score (external evaluator, no bias).
-    Returns (adopted, oracle_score, self_score).
+    Evaluate a candidate on VALIDATION_TASKS against the parent's scores.
+    Gate: margin + paired wins (see _beats_parent).
+    Returns (adopted, oracle_score, per_task_scores, wins, losses).
     """
-    oracle_score, self_score = eval_on_validation(candidate_prompt, condition, template)
-    adopted = oracle_score > parent_oracle_score
-    return adopted, oracle_score, self_score
+    oracle_score, per_task = eval_on_validation(candidate_prompt, condition, template)
+    adopted, wins, losses = _beats_parent(
+        oracle_score, per_task, parent_oracle_score, parent_task_scores, condition
+    )
+    return adopted, oracle_score, per_task, wins, losses
 
 
 # ── Benchmark evaluation ──────────────────────────────────────────────────────
@@ -806,13 +797,14 @@ def run_experiment(
         recent_scores = [h["avg_score"] for h in history_prompt[-(config.STAGNATION_WINDOW - 1):]] + [avg_fb]
         stagnating    = len(recent_scores) < 2 or (recent_scores[-1] - recent_scores[0]) < config.IMPROVEMENT_MIN
         if condition != "baseline" and stagnating:
-            # ── Compute parent scores (oracle primary, self for Pareto) ────
-            parent_oracle_score, parent_self_score = eval_on_validation(
+            # ── Compute parent scores (oracle mean + per-task for pairing) ──
+            parent_oracle_score, parent_task_scores = eval_on_validation(
                 current_prompt, condition, current_template
             )
+            margin = config.ADOPT_MARGIN.get(condition, max(config.ADOPT_MARGIN.values()))
             print(
                 f"           [prompt]   Parent  oracle: {parent_oracle_score:.2f}"
-                f"  self: {parent_self_score:.2f}"
+                f"  (adopt margin: +{margin:.3f})"
             )
 
             # ── Evolve system prompt — population + Pareto selection ───────
@@ -830,25 +822,27 @@ def run_experiment(
                     preview = dara_list[0][first_key][:120].replace("\n", " ")
                     print(f"           [{first_key}] {preview}")
 
-            # Score each candidate on both objectives
-            scored: list[tuple[str, float, float]] = []  # (prompt, oracle, self)
+            # Score each candidate with the calibrated gate (margin + paired wins)
+            scored: list[tuple[str, float, bool, int, int]] = []  # (prompt, oracle, beats, wins, losses)
             for i, candidate in enumerate(population):
-                _, cand_oracle, cand_self = validate_candidate(
-                    candidate, parent_oracle_score, condition, current_template
+                beats, cand_oracle, cand_tasks, wins, losses = validate_candidate(
+                    candidate, parent_oracle_score, parent_task_scores,
+                    condition, current_template,
                 )
-                beats = cand_oracle > parent_oracle_score
                 print(
                     f"           [prompt]   Candidate {i+1}:"
-                    f"  oracle {cand_oracle:.2f}  self {cand_self:.2f}"
+                    f"  oracle {cand_oracle:.2f}  ({wins}W/{losses}L vs parent)"
                     f"  {'✓' if beats else '✗'}"
                 )
-                scored.append((candidate, cand_oracle, cand_self))
+                scored.append((candidate, cand_oracle, beats, wins, losses))
                 candidates_log.append({
                     "type":         "prompt",
                     "candidate":    i + 1,
                     "oracle_score": cand_oracle,
-                    "self_score":   cand_self,
                     "score":        cand_oracle,   # primary metric for downstream compat
+                    "wins":         wins,
+                    "losses":       losses,
+                    "margin":       cand_oracle - parent_oracle_score,
                     "adopted":      beats,
                     "text":         candidate,
                     "dara":         dara_list[i] if i < len(dara_list) else {},
@@ -857,11 +851,10 @@ def run_experiment(
                 if beats:
                     adopt_wins += 1
 
-            # Option 2 — Pareto dominance: select best non-dominated candidate
-            best_prompt, best_oracle, best_self = _pareto_best(scored)
+            best_prompt, best_oracle, best_beats, _, _ = max(scored, key=lambda x: x[1])
             top2 = sorted(scored, key=lambda x: x[1], reverse=True)[:2]
 
-            if len(top2) >= 2 and top2[0][1] > parent_oracle_score:
+            if len(top2) >= 2 and top2[0][2]:  # top candidate cleared the gate
                 print(
                     f"           [prompt]   Crossing over top 2"
                     f"  (oracle {top2[0][1]:.2f}, {top2[1][1]:.2f})..."
@@ -869,52 +862,51 @@ def run_experiment(
                 merged = crossover_candidates(
                     top2[0][0], top2[0][1], top2[1][0], top2[1][1]
                 )
-                _, merged_oracle, merged_self = validate_candidate(
-                    merged, parent_oracle_score, condition, current_template
+                merged_beats, merged_oracle, _, m_wins, m_losses = validate_candidate(
+                    merged, parent_oracle_score, parent_task_scores,
+                    condition, current_template,
                 )
                 adopt_total += 1
-                if merged_oracle > parent_oracle_score:
+                if merged_beats:
                     adopt_wins += 1
                     print(
                         f"           [prompt]   Crossover adopted"
-                        f"  (oracle {merged_oracle:.2f} > parent {parent_oracle_score:.2f})"
+                        f"  (oracle {merged_oracle:.2f} > parent {parent_oracle_score:.2f}"
+                        f" + margin, {m_wins}W/{m_losses}L)"
                     )
                     current_prompt = merged
                     candidates_log.append({
                         "type": "crossover", "oracle_score": merged_oracle,
-                        "self_score": merged_self, "score": merged_oracle,
+                        "score": merged_oracle, "wins": m_wins, "losses": m_losses,
+                        "margin": merged_oracle - parent_oracle_score,
                         "adopted": True, "text": merged,
                     })
                 else:
-                    # Crossover didn't win — fall back to Pareto-best single candidate
-                    if best_oracle > parent_oracle_score:
-                        print(
-                            f"           [prompt]   Crossover weaker —"
-                            f" Pareto-best adopted (oracle {best_oracle:.2f})"
-                        )
-                        current_prompt = best_prompt
-                    else:
-                        print(
-                            f"           [prompt]   Crossover weaker —"
-                            f" no candidate beat parent ({parent_oracle_score:.2f})"
-                        )
+                    # Crossover didn't clear the gate — fall back to best candidate
+                    print(
+                        f"           [prompt]   Crossover weaker —"
+                        f" best candidate adopted (oracle {best_oracle:.2f})"
+                    )
+                    current_prompt = best_prompt
                     candidates_log.append({
                         "type": "crossover", "oracle_score": merged_oracle,
-                        "self_score": merged_self, "score": merged_oracle,
+                        "score": merged_oracle, "wins": m_wins, "losses": m_losses,
+                        "margin": merged_oracle - parent_oracle_score,
                         "adopted": False, "text": merged,
                     })
                 show_prompt_diff(old_prompt, current_prompt, "P", gen)
-            elif best_oracle > parent_oracle_score:
+            elif best_beats:
                 print(
-                    f"           [prompt]   Pareto-best adopted"
-                    f"  (oracle {best_oracle:.2f} > parent {parent_oracle_score:.2f})"
+                    f"           [prompt]   Best candidate adopted"
+                    f"  (oracle {best_oracle:.2f} > parent {parent_oracle_score:.2f} + margin)"
                 )
                 current_prompt = best_prompt
                 show_prompt_diff(old_prompt, current_prompt, "P", gen)
             else:
                 print(
-                    f"           [prompt]   No candidate beat parent"
-                    f"  (oracle {parent_oracle_score:.2f}) — parent survives."
+                    f"           [prompt]   No candidate cleared the gate"
+                    f"  (parent {parent_oracle_score:.2f} + margin {margin:.3f})"
+                    f" — parent survives."
                 )
 
 

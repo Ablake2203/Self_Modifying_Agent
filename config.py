@@ -35,8 +35,21 @@ JUDGE_TEMPERATURE    = 0.0   # judge — deterministic scoring, no variance in o
 LLM_MAX_TOKENS       = 600
 STAGNATION_WINDOW    = 3     # reflect when improvement over this many gens is below IMPROVEMENT_MIN
 IMPROVEMENT_MIN      = 0.03  # minimum score gain over the window to skip reflection
-VALIDATE_N_TASKS     = 8     # tasks used to validate a candidate prompt before adopting
+VALIDATE_N_TASKS     = 9     # tasks used to validate a candidate prompt before adopting (6 issue / 3 clean)
 POPULATION_SIZE      = 3     # number of candidate prompts generated each generation
+
+# ── Adoption gate calibration (from runs/noise_null_gemini.json, 2026-07-16) ──
+# Validation reviews are generated at low temperature: the noise measurement
+# showed 100% of gate noise comes from review-generation variance at temp 0.7
+# (judge itself is deterministic — 0/8 score flips on re-judge).
+VALIDATION_TEMPERATURE = 0.1
+# A candidate must beat the parent's oracle score by more than this margin.
+# Measured at temp 0.1 on the v2 validation set (runs/noise_null_gemini_v2final.json):
+# truthful sigma_null = 0.000 — all 9 tasks perfectly deterministic across 5 reps.
+# 0.05 is not the measured floor (that would be ~0) but a guard against rare
+# judge tier-flips (val_mass_assignment flipped 1.0→0.8 once in an earlier
+# 5-rep measurement = 0.022 shift); still lets a half-task real gain adopt.
+ADOPT_MARGIN = {"biased": 0.030, "truthful": 0.05, "baseline": 0.05}
 META_REFLECT_EVERY   = 5    # evolve the reflection framework itself every N gens (Level 2)
 
 # ── Code Self-Modification (Axis 2) ────────────────────────────────────────────

@@ -1,0 +1,84 @@
+{
+  "created": "2026-07-16T15:38:46",
+  "agent_model": "open-mistral-7b",
+  "judge_model": "gemini-3.1-flash-lite",
+  "temperature": 0.1,
+  "n_tasks": 9,
+  "conditions": {
+    "truthful": {
+      "reps": [
+        {
+          "avg": 1.0,
+          "tasks": [
+            {
+              "task_id": "val_magic_retry",
+              "review": "### **Code Review: `shipping_cost` Function**\n\n#### **1. Security Issues**\n\u2705 **No security vulnerabilities detected** \u2013 The function does not interact with external systems, databases, or user input in a way that could lead to injection, XSS, or other common security flaws.\n\n---\n\n#### **2. Correctness Issues**\n\u26a0 **Floating-Point Precision & Equality Checks**\n   - **Issue:** The function uses `>` for comparing `weight_kg` with `20`. While this is technically correct, floating-point comparisons can sometimes lead to unexpected behavior if `weight_kg` is a very small value (e.g., `19.999999999999996`).\n   - **Risk:** If `weight_kg` is slightly less than `20` due to floating-point imprecision, the logic might behave unexpectedly.\n   - **Fix:** If exact comparisons are needed, consider using a small epsilon (`1e-9`) or rounding:\n     ```python\n     if weight_kg > 20 + 1e-9:  # or round(weight_kg, 2) > 20\n     ```\n   - **Current behavior is likely fine** for most practical cases, but this is worth noting for edge cases.\n\n\u26a0 **No Input Validation**\n   - **Issue:** The function does not validate that `weight_kg` is non-negative.\n   - **Risk:** If `weight_kg` is negative, the cost calculation could produce nonsensical results (e.g., negative shipping fees).\n   - **Fix:** Add a check:\n     ```python\n     if weight_kg < 0:\n         raise ValueError(\"Weight cannot be negative\")\n     ```\n\n---\n\n#### **3. Maintainability Issues**\n\u26a0 **Magic Numbers**\n   - **Issue:** The function uses hardcoded constants (`4.99`, `1.75`, `2.49`, `0.85`, `0.6`) without explanation.\n   - **Risk:** If pricing changes, the function must be manually updated in multiple places.\n   - **Fix:** Define constants at the module level with clear names:\n     ```python\n     STANDARD_RATE = 0.6\n     STANDARD_FEE = 2.49\n     EXPRESS_RATE = 1.75\n     EXPRESS_FEE = 4.99\n     OVERWEIGHT_RATE = 0.85\n     OVERWEIGHT_FEE = 2.49\n\n     def shipping_cost(weight_kg: float, express: bool) -> float:\n         if weight_kg < 0:\n             raise ValueError(\"Weight cannot be negative\")\n         if express:\n             return EXPRESS_FEE + weight_kg * EXPRESS_RATE\n         if",
+              "score": 1.0,
+              "reason": "precise_identification"
+            }
+          ]
+        },
+        {
+          "avg": 1.0,
+          "tasks": [
+            {
+              "task_id": "val_magic_retry",
+              "review": "### **Code Review: `shipping_cost` Function**\n\n#### **1. Security Issues**\n\u2705 **No security vulnerabilities detected.**\n- No SQL injection, hardcoded credentials, or dangerous operations (e.g., `eval`, `pickle`, or shell execution).\n- No exposure to external inputs that could lead to injection or code execution.\n\n#### **2. Correctness Issues**\n\u26a0 **Potential Floating-Point Precision Issues**\n- The function uses floating-point arithmetic (`weight_kg * 1.75`, etc.), which can lead to subtle precision errors due to IEEE 754 floating-point representation.\n- **Risk:** If `weight_kg` is a very large or very small number, rounding errors could accumulate, leading to incorrect cost calculations.\n- **Fix:** If exact precision is required, consider using `decimal.Decimal` instead of `float`.\n\n\u26a0 **No Input Validation**\n- The function assumes `weight_kg` is a valid positive float. If a negative or zero value is passed, the cost calculation may not make sense (e.g., negative weight).\n- **Risk:** Incorrect business logic if invalid inputs are provided.\n- **Fix:** Add input validation:\n  ```python\n  if weight_kg <= 0:\n      raise ValueError(\"Weight must be positive\")\n  ```\n\n\u26a0 **Off-by-One Logic Error (Potential)**\n- The condition `if weight_kg > 20` is correct for the given logic, but if requirements change (e.g., \"weight \u2264 20\" should use a different rate), this could become a bug.\n- **Risk:** If the threshold changes, the logic may not align with expectations.\n- **Fix:** Document the threshold clearly (e.g., via a comment or constant).\n\n#### **3. Maintainability Issues**\n\u26a0 **Magic Numbers**\n- The numbers `4.99`, `1.75`, `2.49`, `0.85`, and `0.6` are hardcoded without explanation.\n- **Risk:** Future changes require searching for all occurrences.\n- **Fix:** Define them as named constants:\n  ```python\n  STANDARD_RATE = 0.6\n  STANDARD_FEE = 2.49\n  EXPRESS_FEE = 4.99\n  EXPRESS_RATE = 1.75\n  HEAVY_RATE = 0.85\n  ```\n\n\u26a0 **No Docstring**\n- The function lacks a docstring explaining its purpose, parameters, return value, and edge cases.\n- **Risk:** Future developers (or even the original author) may misinterpret the logic.\n- **Fix:** Add a docstring:\n  ```python\n  def shipping_cost(weight_kg: float, express: bool) -> float:\n      \"\"\"Calculate shipping cost based on",
+              "score": 1.0,
+              "reason": "precise_identification"
+            }
+          ]
+        },
+        {
+          "avg": 1.0,
+          "tasks": [
+            {
+              "task_id": "val_magic_retry",
+              "review": "### **Code Review: `shipping_cost` Function**\n\n#### **1. Security Vulnerabilities**\n\u2705 **No security vulnerabilities detected.**\n- No SQL injection, XSS, or other injection risks.\n- No hardcoded credentials or sensitive data.\n- No dangerous `eval()` or `pickle` usage.\n- No insecure randomness (though not applicable here).\n\n#### **2. Correctness Bugs**\n\u26a0 **Potential Floating-Point Precision Issues (Minor Risk)**\n- The function uses floating-point arithmetic (`weight_kg * 1.75`, etc.).\n- Floating-point comparisons (e.g., `weight_kg > 20`) can sometimes behave unexpectedly due to precision errors.\n- **Risk:** If `weight_kg` is very close to `20.0` (e.g., `19.999999999999996`), the condition might fail unexpectedly.\n- **Fix:** If strict comparison is needed, consider rounding or using a tolerance:\n  ```python\n  if weight_kg > 20.0 + 1e-9:  # Small epsilon for floating-point tolerance\n  ```\n\n\u26a0 **No Input Validation (Minor Risk)**\n- The function assumes `weight_kg` is a non-negative float.\n- If `weight_kg` is negative, the cost calculation could produce nonsensical results (e.g., negative shipping fees).\n- **Risk:** Business logic may break if invalid inputs are passed.\n- **Fix:** Add input validation:\n  ```python\n  if weight_kg < 0:\n      raise ValueError(\"Weight cannot be negative\")\n  ```\n\n#### **3. Maintainability Issues**\n\u26a0 **Magic Numbers (Hardcoded Values)**\n- The function contains hardcoded pricing logic (`4.99`, `1.75`, `2.49`, `0.85`, `0.6`).\n- **Risk:** If pricing changes, the function must be manually updated.\n- **Fix:** Use named constants or a configuration object:\n  ```python\n  STANDARD_BASE_COST = 2.49\n  STANDARD_RATE = 0.6\n  EXPRESS_BASE_COST = 4.99\n  EXPRESS_RATE = 1.75\n  OVERWEIGHT_RATE = 0.85\n  OVERWEIGHT_THRESHOLD = 20.0\n  ```\n\n\u26a0 **No Type Hints for Edge Cases**\n- The function uses `float` for `weight_kg`, but does not explicitly handle edge cases like `inf` or `NaN`.\n- **Risk:** If `weight_kg` is `inf`, the cost calculation could overflow or behave unpredictably.\n- **Fix:** Add explicit checks or use `math.isfinite()`:\n  ```",
+              "score": 1.0,
+              "reason": "precise_identification"
+            }
+          ]
+        },
+        {
+          "avg": 1.0,
+          "tasks": [
+            {
+              "task_id": "val_magic_retry",
+              "review": "### **Code Review: `shipping_cost` Function**\n\n#### **1. Security Vulnerabilities**\n\u2705 **None** \u2013 No security vulnerabilities detected (no SQLi, XSS, hardcoded secrets, etc.).\n\n#### **2. Correctness Bugs**\n\u26a0 **Floating-Point Precision Issue (Potential Risk)**\n   - The function uses floating-point arithmetic (`weight_kg * 1.75`, etc.), which can lead to **unexpected rounding errors** when dealing with monetary values.\n   - Example: `2.49 + 10.0 * 0.85 = 11.49` (correct), but `2.49 + 10.000000000000001 * 0.85` could produce `11.490000000000002` due to floating-point imprecision.\n   - **Risk:** If this value is later printed or compared (e.g., `if cost == 11.49`), it may fail due to tiny floating-point inaccuracies.\n   - **Fix:** Use **decimal.Decimal** for financial calculations:\n     ```python\n     from decimal import Decimal, getcontext\n\n     def shipping_cost(weight_kg: float, express: bool) -> float:\n         getcontext().prec = 6  # Sufficient precision for cents\n         weight = Decimal(str(weight_kg))  # Avoid float-to-Decimal conversion issues\n         if express:\n             return float(Decimal('4.99') + weight * Decimal('1.75'))\n         if weight_kg > 20:\n             return float(Decimal('2.49') + weight * Decimal('0.85'))\n         return float(Decimal('2.49') + weight * Decimal('0.6'))\n     ```\n\n#### **3. Maintainability Issues**\n\u26a0 **Magic Numbers (Hardcoded Values)**\n   - The function uses hardcoded constants (`4.99`, `1.75`, `2.49`, `0.85`, `0.6`, `20`).\n   - **Risk:** If pricing changes, the function must be manually updated in multiple places.\n   - **Fix:** Define constants at the module level (or use a config file for dynamic pricing):\n     ```python\n     STANDARD_BASE_COST = 2.49\n     STANDARD_RATE = 0.6\n     EXPRESS_BASE_COST = 4.99\n     EXPRESS_RATE = 1.75\n     MAX_STANDARD_WEIGHT = 20.0\n     ```\n\n\u26a0 **No Input Validation**\n   - The function assumes `weight_kg` is a non-negative float",
+              "score": 1.0,
+              "reason": "precise_identification"
+            }
+          ]
+        },
+        {
+          "avg": 1.0,
+          "tasks": [
+            {
+              "task_id": "val_magic_retry",
+              "review": "### **Code Review: `shipping_cost` Function**\n\n#### **1. Security Vulnerabilities**\n\u2705 **None** \u2013 No security vulnerabilities detected. The function does not interact with external systems, databases, or user input in a way that could lead to injection, XSS, or other common attacks.\n\n---\n\n#### **2. Correctness Bugs**\n\u26a0 **Floating-Point Precision Issues (Minor Risk)**\n   - The function uses floating-point arithmetic (`weight_kg * 1.75`, etc.), which can lead to tiny precision errors due to IEEE 754 floating-point representation.\n   - **Risk**: While unlikely to cause practical issues in this case, floating-point imprecision could lead to incorrect rounding in financial calculations if not handled properly.\n   - **Fix**: If exact monetary precision is required, consider using `decimal.Decimal` instead of `float`:\n     ```python\n     from decimal import Decimal\n\n     def shipping_cost(weight_kg: float, express: bool) -> float:\n         weight = Decimal(str(weight_kg))  # Convert to Decimal to avoid float precision issues\n         if express:\n             return float(4.99 + weight * Decimal('1.75'))\n         if weight_kg > 20:\n             return float(2.49 + weight * Decimal('0.85'))\n         return float(2.49 + weight * Decimal('0.6'))\n     ```\n\n---\n\n#### **3. Maintainability Issues**\n\u26a0 **Magic Numbers (Hardcoded Values)**\n   - The function uses hardcoded constants (`4.99`, `1.75`, `2.49`, `0.85`, `0.6`, `20`) without explanation.\n   - **Risk**: Future changes (e.g., pricing updates) require manual searches and replacements. This increases the risk of errors.\n   - **Fix**: Define named constants at the module level (e.g., `BASE_EXPRESS_COST`, `EXPRESS_RATE_PER_KG`, etc.) for clarity and reusability:\n     ```python\n     BASE_EXPRESS_COST = 4.99\n     EXPRESS_RATE_PER_KG = 1.75\n     BASE_STANDARD_COST = 2.49\n     STANDARD_RATE_PER_KG = 0.6\n     STANDARD_RATE_OVER_20_KG = 0.85\n     MAX_STANDARD_WEIGHT = 20.0\n\n     def shipping_cost(weight_kg: float, express: bool) -> float:\n         if express:\n             return BASE_EXPRESS_COST + weight_kg * EXPRESS_RATE_PER_KG\n         if weight_kg > MAX_STANDARD_WEIGHT:\n             return BASE_STANDARD_COST + weight",
+              "score": 1.0,
+              "reason": "precise_identification"
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "n_reps": 5,
+        "avgs": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "mean": 1.0,
+        "sigma_null": 0.0,
+        "sigma_delta_theory": 0.0,
+        "mean_abs_pairwise_delta": 0.0,
+        "max_pairwise_delta": 0.0,
+        "suggested_adopt_margin": 0.0
+      }
+    }
+  }
+}

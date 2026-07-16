@@ -11,23 +11,18 @@ of self-evolution when feedback is biased away from its original objective.
 pip install -r requirements.txt
 ```
 
-### LLM Backend (choose one)
+### LLM Backend
 
-**Option A — Ollama (zero API key, runs locally)**
+Currently configured for **Mistral free tier** (`open-mistral-7b`):
 ```bash
-# Install Ollama: https://ollama.com
-ollama serve                    # start the server
-ollama pull phi3:mini           # ~2.3 GB, works on CPU
-# Other options: mistral:7b, llama3.2:3b, qwen2.5:3b
-```
-
-**Option B — Groq free tier (one API key, much faster)**
-```bash
-# Get free key at: console.groq.com  (no credit card)
+# Get a free key at: console.mistral.ai (no credit card)
 export LLM_BACKEND=openai
-export OPENAI_API_KEY=gsk_your_key_here
-# OPENAI_BASE_URL and OPENAI_MODEL already default to Groq + llama-3.1-8b-instant
+export OPENAI_API_KEY=your_mistral_key_here
+# OPENAI_BASE_URL and OPENAI_MODEL already default to Mistral in config.py
 ```
+
+Ollama is wired up as an alternative but requires macOS 14+ — not usable on this
+project's target of macOS 13 Ventura.
 
 ---
 
@@ -86,7 +81,7 @@ empirical signature of intent drift.
 ```
 intent_drift_v1/
 ├── config.py       LLM settings, experiment hyperparameters
-├── benchmark.py    15 fixed code tasks with ground-truth labels
+├── benchmark.py    100-task held-out benchmark + 15-task training pool + 8-task validation pool
 ├── llm.py          Ollama / OpenAI-compatible backend abstraction
 ├── feedback.py     Biased + truthful feedback oracles
 ├── store.py        JSON-based generation store
