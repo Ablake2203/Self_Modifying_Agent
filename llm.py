@@ -16,18 +16,26 @@ import config
 
 # Longest single sleep we accept from a 429 "try again in ..." hint.
 _RATE_LIMIT_MAX_WAIT = 30 * 60
+# Total quota waits allowed per call — with the 15-min daily-quota floor this
+# gives ≥24h of patience, enough to sleep through a free-tier daily reset.
+_MAX_QUOTA_WAITS = 96
+# Floor for waits when the error names a per-day quota: providers hint tiny
+# retry delays (Gemini: "retry in 22s") that are meaningless for daily limits.
+_DAILY_QUOTA_MIN_WAIT = 15 * 60
 
 
 def _rate_limit_wait(error: Exception) -> float | None:
-    """If error is a 429 with a 'try again in Xm Ys' hint, return seconds to wait."""
+    """If error is a 429 quota/rate error, return seconds to wait."""
     msg = str(error)
-    if "429" not in msg and "rate_limit" not in msg:
+    if "429" not in msg and "rate_limit" not in msg and "RESOURCE_EXHAUSTED" not in msg:
         return None
-    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
-    if not m:
-        return 60.0
-    wait = int(m.group(1) or 0) * 60 + float(m.group(2))
-    return min(wait + 5.0, _RATE_LIMIT_MAX_WAIT)
+    # Groq: "try again in 9m33.6s" — Gemini: "Please retry in 22.4s"
+    m = re.search(r"(?:try again|retry) in (?:(\d+)m)?([\d.]+)s", msg)
+    wait = (int(m.group(1) or 0) * 60 + float(m.group(2)) + 5.0) if m else 60.0
+    # Daily quotas won't be back in seconds regardless of the hint.
+    if re.search(r"PerDay|per day|tokens per day|TPD|RequestsPerDay", msg, re.IGNORECASE):
+        wait = max(wait, _DAILY_QUOTA_MIN_WAIT)
+    return min(wait, _RATE_LIMIT_MAX_WAIT)
 
 # Lazy-init clients
 _openai_client = None
@@ -125,7 +133,7 @@ def call_judge_llm(
 ) -> str:
     """Call the judge/meta-agent backend (Groq). Same interface as call_llm.
     429 rate-limit errors sleep for the provider-hinted duration and do not
-    consume a retry attempt (up to 8 quota waits per call)."""
+    consume a retry attempt (long-patient: sleeps through daily quota resets)."""
     _max_tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
     last_error  = None
     attempt     = 0
@@ -136,9 +144,9 @@ def call_judge_llm(
         except Exception as e:
             last_error = e
             rl_wait    = _rate_limit_wait(e)
-            if rl_wait is not None and quota_waits < 8:
+            if rl_wait is not None and quota_waits < _MAX_QUOTA_WAITS:
                 quota_waits += 1
-                print(f"  [judge] Rate limited — waiting {rl_wait:.0f}s (quota wait {quota_waits}/8)...")
+                print(f"  [judge] Rate limited — waiting {rl_wait:.0f}s (quota wait {quota_waits}/{_MAX_QUOTA_WAITS})...")
                 time.sleep(rl_wait)
                 continue
             attempt += 1
@@ -160,7 +168,7 @@ def call_llm(
     max_tokens overrides config.LLM_MAX_TOKENS for this call only.
     temperature overrides config.LLM_TEMPERATURE for this call only.
     429 rate-limit errors sleep for the provider-hinted duration and do not
-    consume a retry attempt (up to 8 quota waits per call).
+    consume a retry attempt (long-patient: sleeps through daily quota resets).
     """
     _max_tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
     last_error  = None
@@ -176,9 +184,9 @@ def call_llm(
         except Exception as e:
             last_error = e
             rl_wait    = _rate_limit_wait(e)
-            if rl_wait is not None and quota_waits < 8:
+            if rl_wait is not None and quota_waits < _MAX_QUOTA_WAITS:
                 quota_waits += 1
-                print(f"  [LLM] Rate limited — waiting {rl_wait:.0f}s (quota wait {quota_waits}/8)...")
+                print(f"  [LLM] Rate limited — waiting {rl_wait:.0f}s (quota wait {quota_waits}/{_MAX_QUOTA_WAITS})...")
                 time.sleep(rl_wait)
                 continue
             attempt += 1

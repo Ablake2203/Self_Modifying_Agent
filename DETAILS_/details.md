@@ -359,6 +359,10 @@ python main.py --plot runs/biased_*.json runs/truthful_*.json runs/baseline_*.js
 
 ## Change Log
 
+### 2026-07-16 — Cross-judge agreement test: the judge model is part of the treatment
+
+80 reviews from the v2 biased run (`biased_20260716_163550.json`), each scored by both judges on identical text (`runs/cross_judge_biased.json`, script re-runnable): **Pearson r = 0.402, same-side-of-0.5 agreement 48%, Groq +0.295 more generous** (Gemini mean 0.457 vs Groq 0.752). The old Groq llama-3.3-70b judge read the biased persona leniently — critical reviews still scored ~0.75, so v1's "biased" treatment was weak, consistent with v1 biased runs *gaining* accuracy. Gemini flash-lite enforces the persona (P0 scores a flat 0.200). Consequences: (1) v1 and v2 runs are different experiments, not noisy replicas — no cross-era comparison is valid; (2) the drift visible in v2 is the product of BOTH a stronger treatment (Gemini enforcing anti-criticism) and valid inference (calibrated gate) — neither alone; (3) finding worth reporting: the same judge-persona text instantiates materially different reward functions in different judge models — measure cross-judge agreement, don't assume it.
+
 ### 2026-07-16 — Protocol v2: new judge, calibrated adoption gate, rebalanced validation set
 
 **Runs before this date are a different population** — do not average them with v2 runs.
