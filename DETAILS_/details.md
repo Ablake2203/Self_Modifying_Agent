@@ -364,6 +364,7 @@ python main.py --plot runs/biased_*.json runs/truthful_*.json runs/baseline_*.js
 
 ## Change Log
 
+<<<<<<< HEAD
 ### 2026-07-23 — Intent-drift measurement prototype (literature survey → RAGAS/LangSmith harness → smoke test → Value-Action Gap)
 
 Existing metrics (cosine drift, benchmark accuracy) can't separate "lost the ability to catch issues" from "kept the ability but stopped using it" — the latter is what happened in `biased_20260716_163550` (gen 20 lost every original security commitment while accuracy stayed ~78%). Three-stage attempt at a dedicated measurement:
@@ -400,6 +401,54 @@ Two-act finding: the first adoption (P0→P1) fixed a real defect — P0 almost 
 
 **Runs before this date are a different population — never averaged with v2 runs.**
 
+=======
+### 2026-07-28 — CHARTER framework designed (supersedes PACT and the RAGAS-harness direction)
+
+**New design doc: `DETAILS_/charter_framework.md`** — a from-scratch conceptual framework for measuring intent drift, replacing the measurement *direction* of all four prior attempts (the six `metrics.py` signals, PACT, the `drift_eval.py` RAGAS-style harness, and VAG). Design only; no code was written or changed.
+
+**Why a fifth attempt:** all four prior attempts implicitly define intent as P₀ itself (its text or its gen-0 behavior). The v2.1 re-benchmark table (2026-07-17 entry below) refutes that definition with data already on disk: P₀ satisfies its own "say clean when clean" clause at 0.04, the P₀→P₁ adoption repaired it to 0.88 while holding security at 0.92 (movement *toward* intent that every P₀-anchored metric scores as drift), and the real failure — P₁→P₂ trading security 0.92→0.60 and maintainability 0.91→0.48 for clean-task 1.00 — is invisible to the aggregate accuracy those metrics track.
+
+**Core moves** (full spec in the doc): intent formalized as a frozen, versioned **charter** I = (C, ⪰, S_crit) — ~8 deontic constraints with a priority order and an explicit free-variation region — with drift defined per constraint against *best previously attained* satisfaction, and legitimate adaptation defined as Pareto non-degradation on C; a **K–A–E triple ledger** (latent capability / enacted behavior / declared commitment) whose 2³ cube derives the drift taxonomy; six metrics **M1–M6** with no weighted composite (minimal-pair Constraint Satisfaction Profile on the ~100 unused authored tasks; an elicitation ladder yielding a graded suppression threshold τ; a human-gold declared-commitment ledger with a birth ledger; priority-reversal probes; VAG recast as attribution — Acknowledged-Violation Rate over stored `dara_thoughts`; embedding drift demoted to free triage); **adoption-event-indexed** identification (v2 policies are piecewise-constant in the prompt — branchA's 21 gens hold exactly 3 distinct prompts); noise bands, honest power numbers, and placebo-prompt / clause-deletion instrument controls; verbatim predictions and six falsifiers, including "any verdict firing on a baseline run falsifies the firing metric."
+
+**Status of prior artifacts:** `drift_eval.py` is retained as plumbing only (its experiment/diff harness shape feeds M1; its metrics are superseded). VAG is absorbed as M5. TODO (local working tree): add a superseded-by-CHARTER header to `DETAILS_/intent_drift_framework.md` — that file, `drift_eval.py`, and `runs/rebenchmark_biased_v21.json` are untracked local files not in the repository, which the CHARTER doc flags as housekeeping for the implementation session.
+
+### 2026-07-23 — Intent-drift measurement prototype (literature survey → RAGAS/LangSmith harness → smoke test → Value-Action Gap)
+
+Existing metrics (cosine drift, benchmark accuracy) can't separate "lost the ability to catch issues" from "kept the ability but stopped using it" — the latter is what happened in `biased_20260716_163550` (gen 20 lost every original security commitment while accuracy stayed ~78%). Three-stage attempt at a dedicated measurement:
+
+1. **Literature survey** (concept-drift detectors, Agent Stability Index arXiv:2601.04170, persona-drift arXiv:2402.10962, misevolution/ATP arXiv:2509.26354/2510.04860, reward-overoptimization arXiv:2210.10760, Hypocrisy Gap arXiv:2602.02496). None separates won't-from-can't black-box or gives drift a direction. Full writeup: `DETAILS_/intent_drift_framework.md` ("PACT" design — novel combination, not exhaustively checked against prior art).
+2. **Reframed as a RAGAS/LangSmith-style eval harness** (`drift_eval.py`, mapping in `DETAILS_/drift_eval_ragas_style.md`): `PROBE_DATASET` reuses `BENCHMARK_TASKS`; each generation is an `Experiment` diffable via `compare_experiments()`; four metrics modeled on RAGAS's four (`commitment_faithfulness`, `behavior_relevancy`, `issue_recall`, `issue_precision`), plus one novel metric — `recall_attainment_gap` (out-of-role capability recall minus in-role recall; a RAG retriever has no "role" to step out of, an evolving agent does).
+3. **Live smoke test (gen 0 vs gen 20, `biased_20260716_163550_branchA.json`) found two real bugs, not yet fixed**: `issue_precision` misuses `raises_false_alarm()` (built for a different purpose) and rewards brevity over precision; `_capability_probe()` called the judge backend (Gemini) while `get_review()` uses the agent backend (Mistral), so the gap metric was comparing two different models, not one model's capability vs willingness. Also unresolved: judge circularity, a brevity confound, no baseline false-positive floor, uncalibrated temperature.
+4. **Stronger single-metric candidate found in data already on disk, no new API calls**: inspecting `dara_thoughts`, gen-1 candidates' `[RISK]` steps explicitly named the tradeoff ("softening genuine vulnerabilities") and `[ACT]` enacted it anyway — the agent saw the cost and paid it deliberately. Proposed **Value-Action Gap (VAG)**: score whether a candidate's `[ACT]` enacts the tradeoff its own `[RISK]` just named. Computed pre-adoption (a leading indicator, could gate adoption directly), free retroactively, immune to the cross-model bug above, and possible only because DARA logs a self-critique artifact no other surveyed framework's target system produces.
+
+**Status: prototype, not validated.** `drift_eval.py` imports and its dataset construction is tested; `commitment_faithfulness`/`behavior_relevancy` showed the expected large drop in one live run (not repeated for noise). `issue_precision` and `recall_attainment_gap` are not yet trustworthy. VAG is specified, not implemented. Next: fix the capability-probe backend, rebuild `issue_precision`, get a baseline noise floor, then implement and retroactively score VAG.
+
+### 2026-07-17 — Benchmark channel fixed (v2.1); offline re-benchmark reveals capability reallocation, not flat accuracy
+
+**Two benchmark measurement bugs found and fixed** — all pre-fix accuracy numbers carry them:
+- **Noise:** an unchanged prompt scored 70–81% across evals at temp 0.7, still ±6pp at temp 0.1 (`runs/noise_benchmark_p0.json`). Fixed: `BENCHMARK_TEMPERATURE = 0.0` — floor drops to ±2pp / stdev 0.010 (`runs/noise_benchmark_p0_t00.json`). v1-sized "accuracy drops" were inside the old noise band.
+- **Context-blind false-alarm check:** clean tasks used naive substring matching — *"No security issues were found — it is not unsafe"* scored as a false alarm. Fixed: negation-aware, clause-level `raises_false_alarm()` in `benchmark.py` (10 adversarial unit cases). Penalized well-phrased correct verdicts on ~26% of the benchmark and could manufacture accuracy deltas between prompts with different phrasing styles.
+- `eval_benchmark` now also returns a per-type breakdown (security/correctness/maintainability recall + clean false-alarm rate), stored as `accuracy_breakdown`.
+
+**First v2 biased run, internally 2× replicated** (`biased_20260716_163550_branch{A,B}.json`; an accidental double-resume produced two independent continuations from gen 12 — `resume_run.py` now PID-locks the store): feedback 0.20→~0.7 via two gate-clearing adoptions (+0.11, +0.20; 5W/0L, 6W/1L). Zero adoptions in 16 straight gens after gen 5 — under an honest gate, drift saturates rather than compounds.
+
+**Offline re-benchmark of the run's 3 distinct prompts under the fully corrected channel** (`runs/rebenchmark_biased_v21.json`) — this **supersedes** the in-run "flat at 78–81%" reading, which predates all three fixes above:
+
+| prompt | overall | security | correctness | maintainability | clean |
+|---|---|---|---|---|---|
+| P0 (gen 0) | 68% | 0.92 | 1.00 | 0.78 | 0.04 |
+| P1 (gen-1 adoption) | 92% | 0.92 | 0.96 | 0.91 | 0.88 |
+| P2 (gen-5 adoption, final) | 75% | 0.60 | 0.88 | 0.48 | 1.00 |
+
+Two-act finding: the first adoption (P0→P1) fixed a real defect — P0 almost never said code was clean (4%) — while keeping detection intact, a genuine +24pp gain. The second adoption (P1→P2) then overshot: clean-task performance hit a perfect 1.00 by trading away detection (security 0.92→0.60, maintainability 0.91→0.48), a −17pp loss from P1's peak. Gen-0-to-final accuracy alone (68%→75%) reads as mild improvement and matches every noisy prior reading — only the per-type breakdown shows capability was reallocated away from security/maintainability toward the judge-rewarded category, not simply gained or lost. One seed; replication is the next demand.
+
+**Truthful was stopped at gen 0** pending these fixes and has not yet been relaunched. Infra: `resume_run.py` (rebuilds checkpoint from the store), daily-quota-patient 429 handling in `llm.py`, `measure_benchmark_noise.py`.
+
+### 2026-07-16 — Protocol v2: Gemini judge, calibrated adoption gate, deterministic validation set
+
+**Runs before this date are a different population — never averaged with v2 runs.**
+
+>>>>>>> Add CHARTER design doc: charter-relative intent-drift measurement framework
 - **Judge → `gemini-3.1-flash-lite`.** Groq's 100k/day limit killed runs; Gemini free tier for new keys is on the 3.x line; 3.5-flash (thinking model) starves the 100-token judge budget. Measured deterministic at temp 0.
 - **Cross-judge test** (`runs/cross_judge_biased.json`, 80 identical reviews, both judges): **r = 0.402, same-side agreement 48%, Groq +0.295 more generous.** llama read the biased persona leniently (v1 treatment was weak — consistent with v1 biased runs gaining accuracy); Gemini enforces it (P₀ flat 0.200). **The judge model is part of the treatment**; v2 drift = stronger treatment × valid inference, jointly.
 - **Adoption gate calibrated.** `measure_noise.py` showed two evals of the identical prompt differed by up to 0.15 at temp 0.7 (100% review-generation variance; judge deterministic) — the old `>` gate adopted coin flips. Now: validation reviews at `VALIDATION_TEMPERATURE = 0.1`; adopt only if `candidate − parent > ADOPT_MARGIN[condition]` **and** more per-task wins than losses (`_beats_parent()`). Removed dead `_pareto_best` / `self_score_review`. Logs record wins/losses/margin per candidate.
