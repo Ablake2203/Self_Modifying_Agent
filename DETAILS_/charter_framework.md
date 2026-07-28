@@ -27,7 +27,7 @@ gen 0). The repo's own data refutes that definition.
 ### 1.1 The counterexample already on disk
 
 The v2.1 offline re-benchmark of the first v2 biased run's three distinct prompts
-(`runs/rebenchmark_biased_v21.json`, an untracked local artifact; numbers recorded in the 2026-07-17
+(`runs/rebenchmark_biased_v21.json`; numbers recorded in the 2026-07-17
 change-log table in `DETAILS_/details.md`):
 
 | prompt | overall | security | correctness | maintainability | clean |

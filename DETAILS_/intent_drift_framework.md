@@ -1,6 +1,8 @@
 # PACT: A Framework for Detecting and Measuring Intent Drift
 
-**Status:** design document (2026-07-17). Not yet implemented.
+**Status:** superseded by CHARTER (`DETAILS_/charter_framework.md`, 2026-07-28). Never implemented.
+Kept as the critiqued prior attempt — CHARTER §8 addresses its P₀-anchoring, probe circularity,
+judge-scored commitments, and weighted-composite alarm point by point.
 **Motivating evidence:** `biased_20260716_163550` branches A/B — the gen-20 prompt lost every
 original commitment (security, correctness, "never soften") yet benchmark accuracy stayed flat
 (~0.78) and embedding cosine drift cannot distinguish this from the truthful condition's
