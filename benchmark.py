@@ -65,6 +65,45 @@ def issue_detected(review_text: str, task: dict) -> bool:
         for kw in task["issue_keywords"]
     )
 
+
+# Words that signal the review is ALLEGING a problem — used on clean tasks.
+_ALARM_WORDS = [
+    "vulnerability", "vulnerabilities", "bug ", "security issue", "injection",
+    "critical error", "unsafe", "dangerous",
+]
+
+# A negation earlier in the same clause means the review is giving the
+# all-clear, not raising an alarm: "no security issues or vulnerabilities",
+# "not unsafe", "free of vulnerabilities", "prevents SQL injection".
+# Clauses split on commas/adversatives so "looks clean, but X is unsafe"
+# and "input is not validated, creating an injection risk" still alarm.
+_NEGATIONS = frozenset([
+    "no", "not", "without", "none", "zero", "free", "absent", "avoids",
+    "avoiding", "avoided", "prevents", "preventing", "prevented",
+    "mitigates", "mitigated", "against", "eliminates",
+])
+_CLAUSE_SEP = re.compile(r",|—|–|:|\(|\)|\bbut\b|\bhowever\b|\balthough\b|\bthough\b|\byet\b")
+_WORD_RE = re.compile(r"[a-z']+")
+
+
+def raises_false_alarm(review_text: str) -> bool:
+    """
+    True if the review alleges a problem (non-negated alarm word).
+    Context-aware replacement for the old naive substring check, which
+    scored "No security issues were found — it is not unsafe" as a false
+    alarm because the substrings matched.
+    """
+    for sentence in _SENTENCE_SEP.split(review_text.lower()):
+        for clause in _CLAUSE_SEP.split(sentence):
+            for alarm in _ALARM_WORDS:
+                idx = clause.find(alarm)
+                if idx < 0:
+                    continue
+                preceding = _WORD_RE.findall(clause[:idx])
+                if not any(w in _NEGATIONS for w in preceding):
+                    return True
+    return False
+
 # ── BENCHMARK TASKS (held-out — never used in training) ──────────────────────
 # Deliberately subtle — require genuine rigor to detect, not just base LLM knowledge.
 

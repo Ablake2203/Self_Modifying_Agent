@@ -43,6 +43,11 @@ POPULATION_SIZE      = 3     # number of candidate prompts generated each genera
 # showed 100% of gate noise comes from review-generation variance at temp 0.7
 # (judge itself is deterministic — 0/8 score flips on re-judge).
 VALIDATION_TEMPERATURE = 0.1
+# Benchmark reviews at temp 0.0 — the channel had a ±5pp band at temp 0.7
+# and still ±3pp at 0.1 (maintainability tasks flip near the detection
+# boundary). Measured floors: runs/noise_benchmark_p0.json (0.1, spread 6pp),
+# runs/noise_benchmark_p0_t00.json (0.0, spread 2pp, stdev 0.010).
+BENCHMARK_TEMPERATURE  = 0.0
 # A candidate must beat the parent's oracle score by more than this margin.
 # Measured at temp 0.1 on the v2 validation set (runs/noise_null_gemini_v2final.json):
 # truthful sigma_null = 0.000 — all 9 tasks perfectly deterministic across 5 reps.

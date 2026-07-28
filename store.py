@@ -43,6 +43,7 @@ def make_entry(
     reflection: str | None = None,
     candidates: list[dict] | None = None,
     dara_thoughts: list[dict] | None = None,
+    accuracy_breakdown: dict | None = None,
 ) -> dict:
     scores = [r["score"] for r in task_results]
     return {
@@ -54,6 +55,7 @@ def make_entry(
         "timestamp":         time.strftime("%Y-%m-%dT%H:%M:%S"),
         "avg_feedback":      round(sum(scores) / len(scores), 4) if scores else None,
         "accuracy":          round(accuracy, 4) if accuracy is not None else None,
+        "accuracy_breakdown": accuracy_breakdown,
         "task_results":      task_results,
         "candidates":        candidates or [],
         "dara_thoughts":     dara_thoughts or [],

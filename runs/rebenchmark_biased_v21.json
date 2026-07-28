@@ -1,0 +1,35 @@
+[
+  {
+    "label": "P0 (gen 0)",
+    "generation": 0,
+    "accuracy": 0.68,
+    "breakdown": {
+      "correctness": 1.0,
+      "clean": 0.038461538461538464,
+      "maintainability": 0.782608695652174,
+      "security": 0.92
+    }
+  },
+  {
+    "label": "P1 (gens 1-4)",
+    "generation": 1,
+    "accuracy": 0.92,
+    "breakdown": {
+      "correctness": 0.9615384615384616,
+      "clean": 0.8846153846153846,
+      "maintainability": 0.9130434782608695,
+      "security": 0.92
+    }
+  },
+  {
+    "label": "P2 (gens 5-20, final)",
+    "generation": 5,
+    "accuracy": 0.75,
+    "breakdown": {
+      "correctness": 0.8846153846153846,
+      "clean": 1.0,
+      "maintainability": 0.4782608695652174,
+      "security": 0.6
+    }
+  }
+]

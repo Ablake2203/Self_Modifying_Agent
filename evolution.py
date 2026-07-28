@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import config
-from benchmark import TASKS, BENCHMARK_TASKS, VALIDATION_TASKS, issue_detected
+from benchmark import (TASKS, BENCHMARK_TASKS, VALIDATION_TASKS,
+                       issue_detected, raises_false_alarm)
 from feedback import score_review
 from llm import call_llm
 from store import append_generation, make_entry, new_run_path
@@ -663,23 +664,32 @@ def validate_candidate(
 
 
 # ── Benchmark evaluation ──────────────────────────────────────────────────────
-_FALSE_ALARM_WORDS = [
-    "vulnerability", "bug ", "security issue", "injection",
-    "critical error", "unsafe", "dangerous",
-]
-
-
-def eval_benchmark(prompt: str) -> float:
+def eval_benchmark(prompt: str, return_breakdown: bool = False):
+    """
+    Ground-truth accuracy on held-out BENCHMARK_TASKS.
+    Reviews generate at BENCHMARK_TEMPERATURE (low) — at temp 0.7 this
+    channel had a ±5pp noise band on a fixed prompt, swamping the deltas
+    the experiment needs to detect.
+    With return_breakdown=True also returns per-type recall and the
+    clean-task false-alarm rate — the drift-direction signal.
+    """
     correct = 0
+    by_type: dict[str, list[int]] = {}
     for task in BENCHMARK_TASKS:
-        review = get_review(prompt, task["code"])
-        r      = review.lower()
+        review = get_review(prompt, task["code"],
+                            temperature=config.BENCHMARK_TEMPERATURE)
         if task["has_issue"]:
-            correct += int(issue_detected(review, task))
+            hit = int(issue_detected(review, task))
         else:
-            false_alarm = any(w in r for w in _FALSE_ALARM_WORDS)
-            correct += int(not false_alarm)
-    return correct / len(BENCHMARK_TASKS)
+            hit = int(not raises_false_alarm(review))
+        correct += hit
+        by_type.setdefault(task["issue_type"], []).append(hit)
+
+    accuracy = correct / len(BENCHMARK_TASKS)
+    if not return_breakdown:
+        return accuracy
+    breakdown = {t: sum(v) / len(v) for t, v in by_type.items()}
+    return accuracy, breakdown
 
 
 
@@ -757,7 +767,7 @@ def run_experiment(
     # ── Generation 0: baseline (skip on resume) ───────────────────────────
     if resume_from_gen == 0:
         print("  [gen 0] Evaluating baseline P₀ + T₀ on benchmark...")
-        accuracy_0 = eval_benchmark(current_prompt)
+        accuracy_0, breakdown_0 = eval_benchmark(current_prompt, return_breakdown=True)
         entry_0    = make_entry(
             generation=0,
             prompt=current_prompt,
@@ -765,10 +775,11 @@ def run_experiment(
             reflection=current_reflection_cfg.framework_text,
             task_results=[],
             accuracy=accuracy_0,
+            accuracy_breakdown=breakdown_0,
             condition=condition,
         )
         append_generation(store_path, entry_0)
-        print(f"  [gen 0] Benchmark accuracy: {accuracy_0:.2%}\n")
+        print(f"  [gen 0] Benchmark accuracy: {accuracy_0:.2%}  {breakdown_0}\n")
 
     # ── Generations 1 … N ──────────────────────────────────────────────────
     for gen in range(resume_from_gen + 1, config.NUM_GENERATIONS + 1):
@@ -996,10 +1007,11 @@ def run_experiment(
 
         # Periodic benchmark eval
         accuracy = None
+        breakdown = None
         if gen % config.BENCHMARK_EVAL_EVERY == 0 or gen == config.NUM_GENERATIONS:
             print(f"           Evaluating on full benchmark...")
-            accuracy = eval_benchmark(current_prompt)
-            print(f"           Benchmark accuracy: {accuracy:.2%}")
+            accuracy, breakdown = eval_benchmark(current_prompt, return_breakdown=True)
+            print(f"           Benchmark accuracy: {accuracy:.2%}  {breakdown}")
 
         entry = make_entry(
             generation=gen,
@@ -1008,6 +1020,7 @@ def run_experiment(
             reflection=current_reflection_cfg.framework_text,
             task_results=task_results,
             accuracy=accuracy,
+            accuracy_breakdown=breakdown,
             condition=condition,
             candidates=candidates_log,
             dara_thoughts=gen_dara_thoughts,

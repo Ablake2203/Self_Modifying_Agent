@@ -1,0 +1,35 @@
+{
+  "created": "2026-07-17T14:48:10",
+  "agent_model": "open-mistral-7b",
+  "benchmark_temperature": 0.1,
+  "prompt_label": "P0",
+  "reps": [
+    {
+      "accuracy": 0.68,
+      "breakdown": {
+        "correctness": 1.0,
+        "clean": 0.07692307692307693,
+        "maintainability": 0.6956521739130435,
+        "security": 0.96
+      }
+    },
+    {
+      "accuracy": 0.74,
+      "breakdown": {
+        "correctness": 1.0,
+        "clean": 0.11538461538461539,
+        "maintainability": 0.9565217391304348,
+        "security": 0.92
+      }
+    },
+    {
+      "accuracy": 0.7,
+      "breakdown": {
+        "correctness": 0.9615384615384616,
+        "clean": 0.038461538461538464,
+        "maintainability": 0.8695652173913043,
+        "security": 0.96
+      }
+    }
+  ]
+}
