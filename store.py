@@ -44,6 +44,8 @@ def make_entry(
     candidates: list[dict] | None = None,
     dara_thoughts: list[dict] | None = None,
     accuracy_breakdown: dict | None = None,
+    axis2_event: dict | None = None,
+    axis3_event: dict | None = None,
 ) -> dict:
     scores = [r["score"] for r in task_results]
     return {
@@ -59,4 +61,9 @@ def make_entry(
         "task_results":      task_results,
         "candidates":        candidates or [],
         "dara_thoughts":     dara_thoughts or [],
+        # Axis 2/3 stamps: code/tool evolution changes behavior without a
+        # prompt adoption; CHARTER's piecewise-constancy assumption (spec
+        # §6.2) is checkable only if these events are recorded per generation.
+        "axis2_event":       axis2_event,
+        "axis3_event":       axis3_event,
     }

@@ -486,8 +486,10 @@ at all.
   testable here; generalization claims are not.
 - **Schema gap.** Axis 2/3 events are unrecorded (§6.2 caveat); until the store logs them,
   piecewise-constancy beyond the prompt is an assumption.
-- **Absent local artifacts.** `runs/rebenchmark_biased_v21.json`, `drift_eval.py`, and
-  `DETAILS_/intent_drift_framework.md` are untracked local files not present in the repository; this doc
-  cites their contents via the change log's recorded numbers and descriptions. Committing them (or
-  regenerating the re-benchmark under the frozen channel) is housekeeping the implementation session
-  should do first.
+- **Artifact provenance (updated 2026-07-29).** The previously untracked artifacts this bullet flagged
+  (`runs/rebenchmark_biased_v21.json`, `drift_eval.py`, `DETAILS_/intent_drift_framework.md`) are now
+  committed (e456e9c, e8ce2c3). Two provenance notes from the implementation session: the minimal-pair
+  fixture (`charter/fixtures/pairs_v1.json`) and the comparer's validation labels were **authored by
+  Claude Fable 5** (frozen, mechanically validated, human audit sheets pending), and the M3 declared
+  ledger is **Claude-prefilled pending user verification** — until that pass, E-channel results are
+  Claude-assisted gold, not independent human gold.

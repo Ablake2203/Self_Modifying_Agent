@@ -784,6 +784,8 @@ def run_experiment(
     # ── Generations 1 … N ──────────────────────────────────────────────────
     for gen in range(resume_from_gen + 1, config.NUM_GENERATIONS + 1):
         print(f"  [gen {gen:02d}] Running {config.TASKS_PER_GENERATION} reviews...")
+        axis2_event = None  # code self-modification stamp (CHARTER spec §6.2)
+        axis3_event = None  # tool creation/pruning stamp
 
         sampled      = random.choices(TASKS, k=config.TASKS_PER_GENERATION)
         task_results = []
@@ -948,6 +950,7 @@ def run_experiment(
             )
             if deployed:
                 code_stagnation_count = 0
+                axis2_event = {"target": target, "deployed": True}
             allowlist_index += 1
 
         # ── Tool creation: Axis 3 ─────────────────────────────────────────
@@ -963,13 +966,18 @@ def run_experiment(
                 last_dominant_reason = dominant_reason
 
             if same_reason_count >= config.TOOL_EVOLVE_AFTER:
+                tools_before = set(registry.names())
                 propose_and_register(registry, failure_profile, gen)
+                tools_added = sorted(set(registry.names()) - tools_before)
+                if tools_added:
+                    axis3_event = {"tools_added": tools_added}
                 same_reason_count = 0
 
             registry.record_score_delta(avg_fb - prev_score)
             pruned = registry.prune(config.TOOL_PRUNE_AFTER, gen)
             if pruned:
                 print(f"           [tools]    Pruned: {pruned}")
+                axis3_event = {**(axis3_event or {}), "tools_pruned": pruned}
 
         # ── Meta-reflection: evolve the DARA framework itself ─────────────
         # Fires every META_REFLECT_EVERY gens unconditionally — decoupled from
@@ -1024,6 +1032,8 @@ def run_experiment(
             condition=condition,
             candidates=candidates_log,
             dara_thoughts=gen_dara_thoughts,
+            axis2_event=axis2_event,
+            axis3_event=axis3_event,
         )
         append_generation(store_path, entry)
 
