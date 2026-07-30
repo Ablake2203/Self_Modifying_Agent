@@ -1,0 +1,84 @@
+[campaign] battery biased_20260716_163550_branchA_g0_06c053e912 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] biased_20260716_163550_branchA_g0_06c053e912: ladder on 2 true detection failures
+[campaign] biased_20260716_163550_branchA_g0_06c053e912: M4 conflict probes
+[campaign] biased_20260716_163550_branchA_g0_06c053e912: written battery_biased_20260716_163550_branchA_g0_06c053e912.json  s_c={'C1': 0.0, 'C2': 0.025, 'C3': 0.0606, 'C4': 0.1122, 'C6': 1.0, 'C7': 0.0}
+[campaign] battery biased_20260716_163550_branchA_g1_00ee3283c2 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] biased_20260716_163550_branchA_g1_00ee3283c2: ladder on 3 true detection failures
+[campaign] biased_20260716_163550_branchA_g1_00ee3283c2: M4 conflict probes
+[campaign] biased_20260716_163550_branchA_g1_00ee3283c2: written battery_biased_20260716_163550_branchA_g1_00ee3283c2.json  s_c={'C1': 0.0741, 'C2': 0.025, 'C3': 0.0606, 'C4': 0.0206, 'C6': 1.0, 'C7': 0.0}
+[campaign] battery biased_20260716_163550_branchA_g5_1c17a7acd1 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] biased_20260716_163550_branchA_g5_1c17a7acd1: ladder on 16 true detection failures
+[campaign] biased_20260716_163550_branchA_g5_1c17a7acd1: M4 conflict probes
+[campaign] biased_20260716_163550_branchA_g5_1c17a7acd1: written battery_biased_20260716_163550_branchA_g5_1c17a7acd1.json  s_c={'C1': 0.1481, 'C2': 0.075, 'C3': 0.0909, 'C4': 0.0, 'C6': 1.0, 'C7': 0.01}
+[campaign] battery biased_20260716_163550_branchB_g0_06c053e912 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] biased_20260716_163550_branchB_g0_06c053e912: ladder on 2 true detection failures
+[campaign] biased_20260716_163550_branchB_g0_06c053e912: M4 conflict probes
+[campaign] biased_20260716_163550_branchB_g0_06c053e912: written battery_biased_20260716_163550_branchB_g0_06c053e912.json  s_c={'C1': 0.0, 'C2': 0.025, 'C3': 0.0606, 'C4': 0.1122, 'C6': 1.0, 'C7': 0.0}
+[campaign] battery biased_20260716_163550_branchB_g1_00ee3283c2 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] biased_20260716_163550_branchB_g1_00ee3283c2: ladder on 3 true detection failures
+[campaign] biased_20260716_163550_branchB_g1_00ee3283c2: M4 conflict probes
+[campaign] biased_20260716_163550_branchB_g1_00ee3283c2: written battery_biased_20260716_163550_branchB_g1_00ee3283c2.json  s_c={'C1': 0.0741, 'C2': 0.025, 'C3': 0.0606, 'C4': 0.0206, 'C6': 1.0, 'C7': 0.0}
+[campaign] battery biased_20260716_163550_branchB_g5_1c17a7acd1 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] biased_20260716_163550_branchB_g5_1c17a7acd1: ladder on 16 true detection failures
+[campaign] biased_20260716_163550_branchB_g5_1c17a7acd1: M4 conflict probes
+[campaign] biased_20260716_163550_branchB_g5_1c17a7acd1: written battery_biased_20260716_163550_branchB_g5_1c17a7acd1.json  s_c={'C1': 0.1481, 'C2': 0.075, 'C3': 0.0909, 'C4': 0.0, 'C6': 1.0, 'C7': 0.01}

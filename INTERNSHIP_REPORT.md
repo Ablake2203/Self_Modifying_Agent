@@ -218,23 +218,32 @@ making the multi-thousand-call campaign fully resumable (a real provider outage 
 mid-campaign and it resumed for free); and a staged, self-gating campaign runner
 (`retest → controls → v2`).
 
-*Campaign in progress; numbers are final for completed stages, preliminary for the rest.*
+*Campaign complete 2026-07-30. Full results: `results/charter/report.md`.*
 
 - **Instrument validity — passed.** Test–retest bands per constraint ≤ **±0.06**, all under
   the verdict threshold δ = 0.15 (a fired verdict must beat noise 2–4×). **All 5 placebo
   controls passed** (reworded P₀ variants moved satisfaction by ≤0.11, within δ) — free-
-  variation invariance holds. **Controls gate PASSED with 0 violations.** Clause-deletion
-  positive controls behaved correctly (deleting the clean-verdict clause degraded exactly C4).
-- **Central prediction reproduced in miniature.** A prompt forbidden from mentioning security
-  **denied** a real vulnerability in role but **recovered it** when the role was lifted —
-  **K = 1, willingness threshold τ = 3**: the "won't, not can't" signature the framework
-  exists to detect.
-- **P₀'s self-violation, quantified.** P₀'s contrastive satisfaction is near-zero on most
-  constraints not because it misses issues but because it **alarms on the fixed code too** —
-  direct evidence that P₀ ≠ intent.
+  variation invariance holds. **Controls gate PASSED with 0 violations.** Clause deletions
+  degraded exactly the targeted constraint.
+- **Central prediction confirmed — value drift, "won't not can't."** In-role **security
+  detection collapsed from 100% (P₀) to 74% (P₂)** — in-role misses rose from 2 to 16 — while
+  **latent capability held at K = 1.0 at every prompt** (every missed issue recoverable under
+  elicitation). Drift concentrates in **security, the highest-priority constraint** — the
+  reallocation the aggregate accuracy hid. Correctness held (−0.07); maintainability borderline
+  (−0.12). **P₀→P₁ correctly classifies as repair, not drift.** **All six pre-registered
+  falsifiers passed** (none fired). Reproduced identically on both replicate branches.
+- **Value reweighting appears early (M4).** Priority-reversal probes show 1 inversion at the
+  first adoption (P₁); by P₂ the never-soften probe wins only 67% of conflicts — softening
+  under comfort pressure emerges.
 - **Deliberate drift, with a paper trail (M5, zero-cost).** Both biased-run rewrites **named
   the cost in the agent's own reasoning before enacting it** — gen 1: *"understating genuine
   risks"*; gen 5: *"brevity risks missing critical issues."* Acknowledged-Violation Rate > 0.
+- **Honest instrument finding.** The originally-specified *contrastive* satisfaction metric
+  floored for all prompts because it conflates "detect the issue" (C1) with "don't invent
+  issues" (C7), and **P₀ already violates C7 almost totally** (it over-alarms on ~100% of clean
+  code) — itself evidence that P₀ ≠ intent. The fix (recommended charter v1.1) is to score each
+  constraint on its own applicability region; decomposed that way, the drift above is
+  unambiguous.
 
 ### 4.4 What remains
 
