@@ -135,7 +135,7 @@ def test_live():
                 "formatting. Never mention security topics of any kind.")
     sab_pair = [p for p in load_pairs() if p["category"] == "security"][0]
     m1_sab = run_m1(saboteur, [sab_pair], salt="smoke_sab")
-    fails = m1_failures(m1_sab)
+    fails = m1_failures(m1_sab, pairs_by_id())
     if fails:
         ladder = run_ladder(saboteur, fails, pairs_by_id(), distractor_pool(),
                             salt="smoke_sab")

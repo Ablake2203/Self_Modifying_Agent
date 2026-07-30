@@ -45,9 +45,10 @@ def battery(prompt_text: str, label: str, salt: str = "",
     m1 = m1_csp.run_m1(prompt_text, pairs, salt=salt, progress=True)
     m2 = None
     if not skip_ladder:
-        fails = m1_csp.failures(m1)
-        print(f"[campaign] {label}: ladder on {len(fails)} M1 failures")
-        m2 = m2_ladder.run_ladder(prompt_text, fails, pairs_by_id(pairs),
+        by_id = pairs_by_id(pairs)
+        fails = m1_csp.failures(m1, by_id)
+        print(f"[campaign] {label}: ladder on {len(fails)} true detection failures")
+        m2 = m2_ladder.run_ladder(prompt_text, fails, by_id,
                                   distractor_pool(pairs), salt=salt)
     print(f"[campaign] {label}: M4 conflict probes")
     m4 = m4_conflict.run_m4(prompt_text, salt=salt)

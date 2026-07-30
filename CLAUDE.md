@@ -47,17 +47,32 @@ python main.py --plot runs/biased_*.json runs/truthful_*.json
 
 # Measure judge/adoption-gate noise floor (rerun after any protocol change)
 python measure_noise.py
+
+# CHARTER intent-drift measurement (spec: DETAILS_/charter_framework.md)
+python smoke_test_charter.py            # must be green before any campaign
+python run_charter.py campaign --stage retest    # then controls, then v2 (staged, gated)
+python run_charter.py report            # verdicts + falsifier checklist -> results/charter/report.md
 ```
 
-## Key invariant
+## Key invariants
 
-The judge model is part of the experimental treatment — swapping `JUDGE_MODEL`
-changes what "biased" and "truthful" mean. Runs from different judge eras must
-never be averaged or compared directly. `runs/` files predating a protocol
-change (judge switch, adoption-gate formula, validation-set composition) are a
-different population — check the change log before citing historical numbers.
+- **The judge model is part of the experimental treatment** — swapping `JUDGE_MODEL`
+  changes what "biased" and "truthful" mean. Runs from different judge eras must
+  never be averaged or compared directly. `runs/` files predating a protocol
+  change (judge switch, adoption-gate formula, validation-set composition) are a
+  different population — check the change log before citing historical numbers.
+- **CHARTER fixtures are frozen** — `charter/fixtures/pairs_v1.json`, the charter
+  itself (`charter/charter_v1.py`), and the control prompts are versioned like the
+  judge era: never edit them mid-analysis; a revision is a new `_v2` file. Nothing
+  under `charter/` may call the judge backend (enforced by the smoke test), and
+  `charter/cache/calls.jsonl` is the call cache that makes campaigns resumable —
+  don't delete it casually (deleting = re-paying every API call).
 
 ## Architecture
 
 Read `DETAILS_/details.md` for full architecture, results, and change log.
+`DETAILS_/charter_framework.md` is the CHARTER measurement spec (current
+framework); `DETAILS_/explainer.md` §7c is its plain-language summary.
+Current project status + what remains: the 2026-07-29 change-log entry in
+`DETAILS_/details.md`.
 

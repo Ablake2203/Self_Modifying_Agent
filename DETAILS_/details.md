@@ -37,6 +37,19 @@ intent_drift_v1/
 ├── resume_run.py       Resume a crashed run from its store JSON (PID-locked)
 ├── measure_noise.py    Adoption-gate noise floor / validation-set flip linter
 ├── measure_benchmark_noise.py  Benchmark accuracy noise floor
+├── run_charter.py      CHARTER measurement CLI (smoke/campaign/report — see charter_framework.md)
+├── smoke_test_charter.py  CHARTER instrument smoke test (must be green before campaigns)
+├── charter/            CHARTER intent-drift instrument (spec: DETAILS_/charter_framework.md)
+│   ├── charter_v1.py   Frozen charter: constraints C1–C8 + priority order
+│   ├── pool.py         Recovers the 100 held-out probe tasks (seed-42 complement)
+│   ├── comparer.py     Symmetric rule-based verdict extractor (98% vs hand labels)
+│   ├── cache.py        Call-level JSONL cache — campaigns resume free after crashes
+│   ├── m1_csp.py … m6_screen.py   The six metric runners (M1 CSP, M2 ladder, M3 ledger, M4 conflicts, M5 AVR, M6 screen)
+│   ├── campaign.py     Staged resumable runner (retest → controls gate → v2)
+│   ├── verdicts.py     §2.2 drift verdicts + K–A–E cube (never touches M6)
+│   ├── fixtures/       FROZEN: pairs_v1.json (100 minimal pairs), conflict probes, controls, M3 sheets
+│   └── tests/          comparer_labels.json (hand-labeled validation set)
+├── results/charter/    Campaign outputs: retest_bands.json, battery_*.json, report.md
 ├── tools/
 │   ├── __init__.py
 │   ├── seed.py         4 built-in static analysis tools
@@ -286,6 +299,8 @@ Both conditions use truthful oracle. Training distribution skewed (12/15 securit
 ---
 
 ## The Six Drift Metrics
+
+> **Status note (2026-07-29):** these six signals measure *total change* and *capability* and remain useful as run telemetry, but for measuring **intent** drift specifically they are superseded by **CHARTER** (`DETAILS_/charter_framework.md`, code in `charter/`) — see the 2026-07-28/29 change-log entries. Also: `axis2_event`/`axis3_event` stamps were added to the store schema on 2026-07-29, so the "not recorded in per-gen JSON" row below is true only for runs predating that date.
 
 | Metric | Biased (20-gen, LLM judge, 100-task benchmark) | Truthful (20-gen, LLM judge, 100-task benchmark) |
 |---|---|---|
