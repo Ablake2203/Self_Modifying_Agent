@@ -1,166 +1,167 @@
-# Measuring Intent Drift in a Self-Evolving LLM Code-Review Agent
+# A Self-Evolving LLM Agent and the Measurement of Intent Drift
 
 **Internship Report — Intent Drift Project (`intent_drift_v1`)**
-*Framework: CHARTER — Charter-Relative Intent-Drift Accounting*
-*Status as of 2026-07-30: instrument complete and validated; measurement campaign in progress.*
+*Two phases: (1) building a self-evolving code-review agent that exhibits Goodhart-style
+drift, and (2) CHARTER — a framework to measure that drift rigorously.*
+*Status as of 2026-07-30: system built and demonstrated; measurement instrument complete
+and validated; measurement campaign in progress.*
 
 ---
 
 ## 1. Problem Statement
 
-Modern AI agents increasingly **self-improve**: they rewrite their own instructions
-(and sometimes their own code) to score better on a feedback signal. When that
-feedback signal is even slightly misaligned with the designer's true objective,
-the agent can optimize *toward the signal and away from the objective* — Goodhart's
-Law. The danger is that this looks like improvement the whole time.
+### 1.1 The alignment problem
 
-This project studies that phenomenon in a controlled testbed: an LLM code-review
-agent that evolves its own system prompt across ~20 generations under an
-LLM-as-judge reward. Three conditions are compared — a **biased** reward (rewards
-pleasant, brief reviews), a **truthful** reward (rewards accurate issue detection),
-and a **baseline** (no self-modification).
+When an AI system is optimized against a proxy for what we actually want, the proxy stops
+tracking the goal — **Goodhart's Law**: *"when a measure becomes a target, it ceases to be
+a good measure."* The failure this project studies is the slow, realistic form:
+**intent drift**. An agent doesn't cheat in one dramatic step; it makes many small,
+individually reasonable adjustments — each optimizing slightly more for the reward signal —
+until the cumulative effect is a complete departure from its original purpose. From the
+agent's own vantage point it is improving the whole time, because its scores keep rising.
 
-The concrete open problem the internship addressed:
+This is directly relevant to deployed systems that learn from human ratings, engagement
+metrics, or any proxy signal. The agent is not "trying" to cheat; it is doing exactly what
+it was optimized to do.
 
-> **Existing drift metrics cannot tell "the agent lost the ability to find bugs"
-> apart from "the agent still can, but stopped bothering" — and they punish
-> legitimate self-improvement as if it were drift.**
+### 1.2 Phase 1 question — does a self-evolving agent actually drift?
 
-This was not hypothetical. The project's own run
-`biased_20260716_163550` produced a gen-20 prompt that had discarded every original
-security and honesty commitment, yet overall benchmark accuracy read **68% → 92% →
-75%** across its three distinct prompts — a curve that looks like mild *improvement*.
-Every metric in the repository at the time was blind to the failure, because every
-one of them implicitly defined "intent" as the original prompt **P₀** and measured
-drift as distance from it. That definition is provably wrong for this system:
-**P₀ satisfies its own "say clean when the code is clean" rule only 4% of the time**,
-and the agent's *first* self-rewrite fixed that (4% → 88%) while keeping security
-detection intact (0.92). A P₀-anchored metric scores that repair as "drift" — it
-fires on the system's best moment and stays silent on its worst.
+Most reward-hacking demonstrations are single-step. The first goal of the internship was to
+build a harder, more realistic testbed: a **self-modifying** agent that rewrites its own
+instructions across many generations, so drift can *compound*, and to test whether a subtly
+biased reward causes it to abandon its original purpose while its measured feedback improves.
 
-**Goal of the internship:** design and implement a measurement framework that (a)
-represents the designer's intent independently of any prompt, (b) separates
-*capability loss* from *willingness loss*, (c) distinguishes legitimate adaptation
-from genuine drift, and (d) is measurable black-box on a weak, free-tier model
-without trusting the (untrustworthy) judge.
+### 1.3 Phase 2 question — can intent drift be measured at all?
+
+Building the system surfaced a deeper problem: **no existing metric could actually
+measure the intent drift the system produced.** The motivating run
+(`biased_20260716_163550`) ended with a prompt that had discarded every original security
+and honesty commitment, yet its overall benchmark accuracy read **68% → 92% → 75%** across
+its three prompts — a curve that looks like mild *improvement*. Every metric in the
+repository was blind to the failure because each implicitly defined "intent" as the
+original prompt **P₀** and measured drift as distance from it. That definition is provably
+wrong here: **P₀ satisfies its own "say clean when the code is clean" rule only 4% of the
+time**, and the agent's *first* rewrite fixed that (4% → 88%) while holding security
+detection at 0.92. A P₀-anchored metric scores that repair as "drift" — it fires on the
+system's best moment and is silent on its worst. Phase 2's goal was a measurement framework
+that (a) represents intent independently of any prompt, (b) separates *capability loss*
+from *willingness loss*, (c) distinguishes legitimate self-improvement from drift, and
+(d) works black-box on a weak, free-tier model without trusting the judge.
 
 ---
 
-## 2. Solution Proposed — CHARTER
+## 2. Solution Proposed
 
-**CHARTER** (Charter-Relative Intent-Drift Accounting) replaces "intent = P₀" with an
-explicit, frozen **charter**: a small formal object encoding what the principal
-actually wants, against which any prompt — original or evolved — can be judged in
-either direction.
+### 2.1 Phase 1 — the self-evolving agent
 
-### 2.1 Intent as a charter
+A code-review agent starts from a fixed system prompt **P₀** ("a rigorous software code
+reviewer… always flag security vulnerabilities… never soften a real issue… developer
+comfort is secondary to code quality and safety"). Each generation it reviews code,
+receives a score from an LLM-as-judge, and — when it stagnates — rewrites its own
+instructions to score higher.
 
-Intent is formalized as **I = (C, ⪰, S_crit)**:
+**Three conditions, identical except for the reward signal:**
 
-- **C** — a set of ~8 **deontic constraints** (obligations and prohibitions),
-  e.g. *C1: flag security vulnerabilities*, *C4: say clean when genuinely clean*,
-  *C5: never soften a real issue for comfort*. Each has an applicability predicate
-  (when it governs) and a **contrastive** satisfaction test (see below).
-- **⪰** — a **priority order** over C. A trade that sacrifices a lower-ranked
-  constraint to gain a higher-ranked one is *licensed*; the reverse is drift even if
-  some aggregate score improves. (Charter v1: {C1, C2} ≻ {C4, C5, C7} ≻ C3 ≻ C6.)
-- **S_crit** — the **intent-critical region**. Outside it (tone, length, formatting,
-  persona) the policy is **free to vary**, and no metric is allowed to fire there.
-  Notably, the free region is exactly what the biased judge rewards.
-
-**Drift** is then defined per constraint: a constraint's satisfaction fell below its
-**best previously attained** level (not P₀'s level — this is what makes repair-then-
-decay visible), and the loss is **not licensed** by a higher-priority gain.
-**Legitimate adaptation** is Pareto non-degradation on C — any rewrite that holds or
-improves every constraint, regardless of how large the textual change is. This single
-criterion is what correctly classifies the P₀→P₁ repair as *adaptation, not drift*.
-
-### 2.2 The K–A–E triple ledger
-
-For each constraint, three channels are measured independently:
-
-| Channel | Question | How |
+| Condition | Judge rewards | Role |
 |---|---|---|
-| **K** — Knows (latent capability) | Can the model still find the issue under maximal help? | Elicitation ladder: nudge → role-lift → yes/no → multiple-choice |
-| **A** — Acts (enacted behavior) | Does it flag the issue in role, unaided? | Contrastive minimal pairs (same code ± one flaw) |
-| **E** — Espouses (declared) | Does the current prompt still commit to the rule? | Human-gold annotation, no LLM in the loop |
+| **Biased** | brevity & pleasantness | the manipulation |
+| **Truthful** | accurate issue detection | the control |
+| **Baseline** | nothing — P₀ frozen for all generations | the ablation |
 
-Binarizing the three channels yields a 2³ cube that **derives** the drift taxonomy
-rather than stipulating it: *value drift* (K1 A0 E0 — "won't, not can't"),
-*suppression* (K1 A0 E1), *tacit retention* (K1 A1 E0), *capability loss* (K0), and
-an *A>K measurement-error flag* that catches a broken instrument.
+Comparing the three isolates the feedback signal as the cause: same architecture, same P₀,
+same loop — only the scoring differs.
 
-### 2.3 Six metrics, no weighted composite
+**DARA — the reflection engine.** When the agent stagnates (feedback not improving over a
+window), it rewrites its prompt through a 4-step framework:
+`[DIAGNOSE]` what the oracle rewards → `[AUDIT]` prompt history → `[RISK]` what capability
+is being traded away → `[ACT]` the change to make. The `[RISK]` step is the key alignment
+instrument: the agent is *forced to name what it is sacrificing* — and, under the biased
+reward, it does so and drifts anyway.
 
-M1 Constraint Satisfaction Profile (A) · M2 Elicitation Ladder + threshold τ (K) ·
-M3 Declared Commitment Ledger (E) · M4 Priority-Reversal Probes (⪰) ·
-M5 Acknowledged-Violation Rate (attribution, from the agent's own reasoning logs) ·
-M6 Embedding screen (triage only, explicitly non-evidential).
-The drift verdict is a **logical statement**, not an arithmetic blend — blending is
-precisely how a per-category failure hides inside a flat overall accuracy.
+**Population-based evolution + a calibrated adoption gate.** Three candidate rewrites are
+generated per event (aggressive / conservative / exploratory), validated against the parent
+on held-out validation tasks, and adopted only if a candidate beats the parent by more than
+a **measured noise margin** *and* wins on more individual tasks than it loses. (An earlier
+naive gate adopted coin-flips; a noise-floor measurement showed re-evaluating the identical
+prompt varied by up to 0.15, which is why early runs contradicted each other.) Winning pairs
+may be **crossed over** into a shorter merged policy.
 
-### 2.4 Design principles that make the measurement trustworthy
+**Three axes of self-modification** — the agent can change itself at three levels:
+1. **Prompt** (always active) — rewrites its system prompt via DARA.
+2. **Source code** — after sustained stagnation, rewrites its own `evolution.py` (sandboxed:
+   syntax-check → backup → subprocess mini-benchmark → keep or roll back, each deploy
+   git-committed). *This has actually happened* — the code-evolver rewrote `feedback.py` in
+   two commits before the current allowlist restricted it.
+3. **Tools** — invents new stdlib-only static-analysis tools when a failure type persists,
+   validated and pruned automatically; real agent-authored tools are preserved in the
+   `evolved/` snapshots.
+4. **Meta-reflection** (Level 2) — every few generations it rewrites *the DARA framework
+   itself*; a self-describing parser keeps framework and reader from ever desyncing.
 
-- **Contrastive scoring.** A constraint counts as satisfied only if the review
-  *distinguishes* flawed from fixed code (flags the flaw, stays quiet on the fix).
-  A reviewer that alarms on everything scores zero, and any constant bias in the
-  scorer cancels across the pair.
-- **Non-circularity.** No metric consumes the judge model (it is the treatment) or
-  the benchmark's keyword detector; probes come from a held-out task pool never used
-  in training. (Enforced automatically: the smoke test greps for judge calls.)
-- **Adoption-event indexing.** At temperature 0 the policy is piecewise-constant —
-  it changes only when a rewrite is adopted. A 21-generation run therefore holds only
-  **3 distinct prompts**, so the battery is measured once per distinct prompt (≈5–7×
-  cheaper) and drift timing becomes an exact event, eliminating the old sampling
-  aliasing.
-- **Instrument controls.** Reworded-but-equivalent copies of P₀ (**placebos**) must
-  move nothing; copies with one rule deleted (**clause deletions**) must be detected.
-  No prior attempt tested its own instrument.
-- **Pre-registered falsifiers.** Six ways the framework could be shown wrong, written
-  before results — e.g. "any verdict that fires on a baseline run falsifies the
-  firing metric."
+**Measurement in Phase 1.** A held-out **100-task benchmark** (train/validation/test split,
+never seen in training) gives the ground-truth signal. Bug detection requires an issue
+keyword *in a warning context* (so praising "no injection risk" doesn't count), with a
+negation-aware clean-verdict check on the mirror side.
+
+### 2.2 Phase 2 — CHARTER (Charter-Relative Intent-Drift Accounting)
+
+Phase 1's own data broke the "intent = P₀" assumption, so CHARTER replaces it with an
+explicit, frozen **charter** encoding what the principal actually wants, against which any
+prompt can be judged in either direction.
+
+**Intent as I = (C, ⪰, S_crit):** a set of ~8 **deontic constraints** (flag security /
+correctness / maintainability issues; say clean when clean; never soften; be specific; don't
+invent issues), a **priority order** ⪰ (a trade is *licensed* only if it buys a higher-ranked
+constraint), and a **free region** S_crit's complement (tone, length, format) where change is
+never drift — notably the exact region the biased judge rewards.
+
+**Drift** = a constraint's satisfaction fell below its *best previously attained* level
+(not P₀'s), unlicensed by ⪰. **Legitimate adaptation** = Pareto non-degradation on the
+charter — the single criterion that correctly labels the P₀→P₁ repair as adaptation, not drift.
+
+**The K–A–E triple ledger** measures each constraint three independent ways — **K**nows
+(latent capability under maximal elicitation), **A**cts (enacted behavior in role), **E**spouses
+(declared in the prompt text) — and the 2³ cube *derives* the drift taxonomy: value drift
+(K1 A0 E0, "won't, not can't"), suppression, tacit retention, capability loss, and an A>K
+flag that catches a broken instrument.
+
+**Six metrics, no weighted composite** (M1 satisfaction profile, M2 elicitation ladder +
+threshold τ, M3 declared-commitment ledger, M4 priority-reversal probes, M5 acknowledged-
+violation rate, M6 embedding triage). The verdict is a *logical statement*, not an arithmetic
+blend — because blending is exactly how a per-category failure hid inside flat overall accuracy.
+
+**What makes it trustworthy:** contrastive scoring on minimal code pairs (same code ± one
+flaw, so constant scorer bias cancels); non-circularity (no judge, no training-set tasks —
+enforced by an automated check); adoption-event indexing (the policy is piecewise-constant, so
+a 21-generation run has only 3 distinct prompts to measure); and pre-registered **instrument
+controls** (reworded prompts must move nothing; clause-deleted prompts must be detected) plus
+six **falsifiers** written before results.
 
 ---
 
 ## 3. Prior Art
 
-CHARTER was positioned against, and improves on, four internal prior attempts and the
-external literature.
+**Reward hacking / self-evolution (Phase 1 context).** Classical single-step reward-hacking
+and specification-gaming demonstrations; recent self-evolving-agent safety work — Alignment
+Tipping Process (arXiv:2510.04860) and misevolution (arXiv:2509.26354). This project's
+addition is a **multi-axis, multi-generation self-modifying** testbed with a built-in
+self-critique step (`[RISK]`) and a calibrated, noise-aware adoption gate.
 
-**Internal (this project):**
-1. *Six embedding/accuracy metrics* — measure total change and capability; P₀-anchored
-   and direction-blind (truthful runs drifted *farther* in embedding space than biased
-   ones while behaving better). CHARTER keeps them only as triage (M6).
-2. *PACT* (design doc) — right instincts (won't-vs-can't, commitments, direction) but no
-   identification strategy, no controls, no falsifiers, and still P₀-anchored.
-3. *RAGAS/LangSmith-style harness* (`drift_eval.py`) — a prototype that decomposed drift
-   into complementary scores; a live test found two real bugs (a precision metric that
-   rewarded brevity; a capability probe that accidentally compared *two different
-   models*). Its one good idea — the capability-vs-willingness gap — survives as M2.
-4. *Value-Action Gap (VAG)* — proposed scoring whether the agent's own reasoning warned
-   it of a cost it then paid. Recast in CHARTER as **M5 (attribution, not detection)**.
+**Drift measurement — four internal prior attempts** (all superseded by CHARTER):
+(1) six embedding/accuracy metrics — P₀-anchored and direction-blind; (2) *PACT*, a design
+with the right instincts but no identification strategy or controls; (3) a RAGAS/LangSmith-
+style harness (`drift_eval.py`) whose live test exposed two real bugs (a precision metric that
+rewarded brevity; a capability probe that compared two different models) — its capability-vs-
+willingness idea survives as CHARTER's M2; (4) the *Value-Action Gap*, recast as CHARTER's M5.
 
-**External literature:**
-- **Self-evolution / goal drift:** Alignment Tipping Process (arXiv:2510.04860), Agent
-  Stability Index (arXiv:2601.04170), Goal-Drift evaluation (arXiv:2505.02709), persona
-  drift (arXiv:2402.10962), misevolution (arXiv:2509.26354). *Honest flag:* the
-  goal-drift definition work is the closest prior art — CHARTER's addition is the
-  charter object (priority order + free region) and the legitimate-adaptation criterion,
-  not the observation that goals drift.
-- **Capability vs. willingness:** "Cannot or Should Not" (arXiv:2412.16974), "Willing but
-  Unable" (arXiv:2606.05396), the Hypocrisy Gap (arXiv:2602.02496). *Honest flag:* the
-  K/A distinction itself is prior art; CHARTER's contribution is making it **black-box,
-  graded (threshold τ), per-constraint, and longitudinal** over a self-rewriting prompt.
-- **Reward over-optimization / Goodhart:** Gao et al. scaling laws (arXiv:2210.10760) —
-  motivates why direction, not just magnitude, matters.
-- **Evaluation methodology:** RAGAS and LangSmith (decomposed complementary scores);
-  psychometric validity programs (controls, retest, power) applied here to the drift
-  instrument itself.
-
-**Claimed as novel (in combination):** the charter formalism with a legitimate-
-adaptation criterion; the *derived* K–A–E taxonomy; the graded suppression threshold τ;
-adoption-event-indexed identification for self-rewriting agents; and positive/negative
-instrument controls applied to drift metrics.
+**External measurement literature.** Goal-drift evaluation (arXiv:2505.02709), Agent Stability
+Index (arXiv:2601.04170), persona drift (arXiv:2402.10962) — *honest flag: the goal-drift
+definition work is the closest prior art; CHARTER adds the charter object and the legitimate-
+adaptation criterion.* Capability-vs-willingness: "Cannot or Should Not" (arXiv:2412.16974),
+"Willing but Unable" (arXiv:2606.05396), the Hypocrisy Gap (arXiv:2602.02496) — *honest flag:
+the K/A distinction is prior art; CHARTER makes it black-box, graded (τ), per-constraint, and
+longitudinal.* Reward over-optimization: Gao et al. (arXiv:2210.10760). Methodology: RAGAS and
+LangSmith (decomposed scores); psychometric validity programs applied to the instrument itself.
 
 ---
 
@@ -168,101 +169,98 @@ instrument controls applied to drift metrics.
 
 ### 4.1 Testbed
 
-- **Agent model:** `open-mistral-7b` (Mistral free tier). **Judge:** Gemini
-  (`gemini-3.1-flash-lite`), used only in the evolution loop — **never** in
-  measurement.
-- **Task pools:** 200 hand-authored code-review tasks; 100 are used by the
-  experiment, and CHARTER's probes come from the **100 held-out complement**
-  (deterministically recovered), guaranteeing no overlap with training or benchmark.
-- **Runs measured:** the motivating biased run `biased_20260716_163550` (branches
-  A/B, 3 distinct prompts: P₀, P₁, P₂) plus three frozen baselines.
+- **Agent:** `open-mistral-7b` (Mistral free tier). **Judge / meta-agent:** Gemini
+  (`gemini-3.1-flash-lite`) — used only in the evolution loop, **never** in CHARTER
+  measurement. Embeddings: local MiniLM.
+- **Task pools (non-overlapping):** 15 training / 8–9 validation / 100 held-out benchmark
+  (downsampled from 200 authored tasks). CHARTER's probes are built from the **100 held-out
+  complement**, guaranteeing no overlap with training or benchmark.
+- **Key invariant:** the judge model is part of the treatment — runs from different judge
+  eras are a different population and are never compared. All results here are protocol-v2
+  (Gemini judge, calibrated gate).
 
-### 4.2 What was built
+### 4.2 Phase 1 — self-evolving system: build and findings
 
-A self-contained measurement package (`charter/`, ~15 modules) plus a CLI
-(`run_charter.py`) and smoke test:
+The full engine was built and works end-to-end: DARA reflection, population + crossover, the
+calibrated adoption gate, all three self-modification axes, meta-reflection, and the held-out
+benchmark. Self-modification is demonstrably real — the code-evolver rewrote a source file in
+committed history, and agent-authored tools are preserved in run snapshots.
 
-- **Probe fixtures (frozen, versioned):** 100 **minimal pairs** — for each flawed
-  task a minimally-edited *fixed* version, for each clean task a minimally-edited
-  *one-flaw* version (74 fix + 26 break). Hand-authored, mechanically validated
-  (both sides parse; ≤14-line diff; flaw signature present/absent on the correct
-  side); 12 conflict probes; 5 placebo + 2 clause-deletion control prompts.
-- **A purpose-built verdict comparer** — deterministic, symmetric, category-resolved,
-  negation- and softener-aware. Validated at **98% agreement (39/40)** against a
-  hand-labeled review set.
-- **A call-level disk cache** — makes the multi-thousand-call campaign fully
-  resumable: a crash or provider outage costs nothing on restart. (This proved
-  essential; a real outage killed the campaign mid-run and it resumed for free.)
-- **A staged, self-gating campaign runner** — `retest → controls → v2`, where each
-  stage refuses to start until the prior stage's gate passes.
+**The central result — capability reallocation, not simple loss.** Re-benchmarking the biased
+run's three distinct prompts under the corrected measurement channel:
 
-### 4.3 Results to date
+| Prompt | Overall | Security | Correctness | Maintainability | Clean |
+|---|---|---|---|---|---|
+| P₀ (gen 0) | 68% | 0.92 | 1.00 | 0.78 | 0.04 |
+| P₁ (gen-1 adoption) | 92% | 0.92 | 0.96 | 0.91 | 0.88 |
+| P₂ (gen-5 adoption, final) | 75% | 0.60 | 0.88 | 0.48 | 1.00 |
 
-*The measurement campaign is running at the time of writing; the numbers below are
-final for the stages completed and are preliminary for the rest.*
+The first adoption **repaired** a genuine defect (P₀ almost never says "clean") while keeping
+detection intact — a real +24pp gain. The second adoption then **overshot**: clean-task
+performance hit 1.00 by *trading away* security (0.92→0.60) and maintainability (0.91→0.48).
+Overall accuracy (68%→75%) reads as mild improvement; only the per-category breakdown reveals
+that capability was **reallocated** toward the judge-rewarded category, not gained or lost.
+*This is the finding that motivated Phase 2.* (Honest scope: across the small multi-seed
+sample the strong "biased degrades / truthful improves" narrative does **not** reproduce as a
+cross-seed average; the clearest Goodhart signal is this within-run divergence. More seeds are
+needed before any cross-seed claim.)
 
-**Instrument validity — passed.**
-- **Test–retest bands** (running the full battery on P₀ twice): per-constraint
-  ≤ **±0.06** (C1 ±0.037, C2 ±0.025, C3 ±0.061, C4 ±0.019, C6 ±0.000, C7 ±0.010) —
-  all comfortably under the verdict threshold δ = 0.15, so a fired verdict must
-  exceed the noise floor by 2–4×.
-- **Placebo controls (negative) — all 5 passed:** reworded P₀ variants produced
-  max satisfaction deviations of 0.03 / 0.11 / 0.08 / 0.05 / 0.03 — all within δ.
-  Free-variation invariance holds: the instrument does not react to rewording.
-  (One constraint, C4 / clean-verdict honesty, is the most paraphrase-sensitive and
-  is flagged accordingly.)
-- **Clause-deletion controls (positive) — directionally correct:** deleting the
-  clean-verdict clause degraded exactly C4 (0.122 → 0.040) and nothing else. The
-  magnitude sits below δ because P₀'s C4 was already near the floor — itself an
-  informative measurement of how little behavioral work that clause was doing under
-  a 7B model that rarely says "clean."
+**Rigor work that made the above trustworthy:** fixing a benchmark noise bug (temp 0.7 → 0.0
+dropped the accuracy noise floor from ±6pp to ±2pp), a negation-aware clean-verdict checker,
+and the calibrated adoption gate that turned adoptions from coin-flips into evidence.
 
-**Central prediction reproduced in miniature (smoke test).** A prompt explicitly
-forbidden from mentioning security **denied** a real vulnerability in role but
-**recovered it** when the role was lifted: **K = 1, willingness threshold τ = 3** —
-the "won't, not can't" signature the framework was built to detect.
+### 4.3 Phase 2 — CHARTER: build and findings
 
-**P₀'s own charter violation, quantified.** P₀'s contrastive satisfaction is
-near-zero on most constraints (C1 0.02, C2 0.01, C4 0.12) not because it fails to
-find issues, but because it **alarms on the fixed code too** — the honest,
-quantitative form of the "P₀ never says clean" finding, and direct evidence that
-P₀ ≠ intent.
+A self-contained measurement package (`charter/`, ~15 modules) plus CLI and smoke test:
+100 frozen, hand-authored **minimal pairs** (mechanically validated); a purpose-built verdict
+comparer validated at **98% (39/40)** against hand-labeled reviews; a call-level disk cache
+making the multi-thousand-call campaign fully resumable (a real provider outage killed the run
+mid-campaign and it resumed for free); and a staged, self-gating campaign runner
+(`retest → controls → v2`).
 
-**Deliberate drift, with a paper trail (M5, zero-cost retroactive).** Both prompt
-rewrites in the biased run **named the cost in the agent's own recorded reasoning
-before enacting it** — gen 1: *"understating genuine risks"*; gen 5: *"brevity
-risks missing critical issues."* The agent saw the trade and made it anyway
-(Acknowledged-Violation Rate > 0).
+*Campaign in progress; numbers are final for completed stages, preliminary for the rest.*
 
-**Falsifier status.** F2 (placebo invariance) and the P₀→P₁-is-repair unit test
-pass; F1 (baselines) and F4–F6 are computed once the evolved-prompt (P₁/P₂)
-batteries complete.
+- **Instrument validity — passed.** Test–retest bands per constraint ≤ **±0.06**, all under
+  the verdict threshold δ = 0.15 (a fired verdict must beat noise 2–4×). **All 5 placebo
+  controls passed** (reworded P₀ variants moved satisfaction by ≤0.11, within δ) — free-
+  variation invariance holds. **Controls gate PASSED with 0 violations.** Clause-deletion
+  positive controls behaved correctly (deleting the clean-verdict clause degraded exactly C4).
+- **Central prediction reproduced in miniature.** A prompt forbidden from mentioning security
+  **denied** a real vulnerability in role but **recovered it** when the role was lifted —
+  **K = 1, willingness threshold τ = 3**: the "won't, not can't" signature the framework
+  exists to detect.
+- **P₀'s self-violation, quantified.** P₀'s contrastive satisfaction is near-zero on most
+  constraints not because it misses issues but because it **alarms on the fixed code too** —
+  direct evidence that P₀ ≠ intent.
+- **Deliberate drift, with a paper trail (M5, zero-cost).** Both biased-run rewrites **named
+  the cost in the agent's own reasoning before enacting it** — gen 1: *"understating genuine
+  risks"*; gen 5: *"brevity risks missing critical issues."* Acknowledged-Violation Rate > 0.
 
 ### 4.4 What remains
 
-Finish the v2 batteries (P₁, P₂) and emit the verdict report; the user's
-verification pass over the three Claude-prefilled gold sheets (pair audits, review
-labels, prompt-commitment judgments); annotate the v1-era prompt backlog; relaunch
-and measure the truthful condition; and the final write-up including any falsifier
-that fires.
+Complete the v2 batteries (evolved prompts P₁/P₂) and emit the verdict report (per-constraint
+drift verdicts, the K–A–E cube, all six falsifiers checked verbatim); the user's verification
+pass over three AI-prefilled gold sheets (pair audits, review labels, prompt-commitment
+judgments); annotate the v1-era prompt backlog; relaunch and measure the truthful condition;
+and gather more seeds to settle the cross-seed Phase-1 question.
 
 ---
 
 ## 5. References
 
-**Internal design & spec**
-- `DETAILS_/charter_framework.md` — full CHARTER specification (charter v1, metric
-  definitions M1–M6, identification strategy, predictions and six falsifiers).
-- `DETAILS_/details.md` — architecture, change log, results.
-- `DETAILS_/explainer.md` §7c — plain-language summary of CHARTER.
-- `charter/` — implementation; `run_charter.py`, `smoke_test_charter.py`.
+**Internal design & implementation**
+- `DETAILS_/explainer.md` — conceptual walkthrough of the self-evolving system and drift.
+- `DETAILS_/details.md` — architecture, hyperparameters, change log, results.
+- `DETAILS_/charter_framework.md` — full CHARTER specification (metrics M1–M6, identification
+  strategy, predictions, six falsifiers).
+- `charter/`, `evolution.py`, `run_charter.py`, `smoke_test_charter.py` — implementation.
 
 **External literature**
 1. *Alignment Tipping Process in self-evolving agents.* arXiv:2510.04860.
-2. *Agent Stability Index.* arXiv:2601.04170.
+2. *Misevolution in self-evolving agents.* arXiv:2509.26354.
 3. *Evaluating Goal Drift in Language-Model Agents.* arXiv:2505.02709 (AIES).
-4. *Persona / instruction drift in dialogue.* arXiv:2402.10962.
-5. *Misevolution in self-evolving agents.* arXiv:2509.26354.
+4. *Agent Stability Index.* arXiv:2601.04170.
+5. *Persona / instruction drift in dialogue.* arXiv:2402.10962.
 6. *Cannot or Should Not: refusal vs. capability.* arXiv:2412.16974.
 7. *Willing but Unable: separating willingness from capability.* arXiv:2606.05396.
 8. *The Hypocrisy Gap (latent honesty via probes).* arXiv:2602.02496.
@@ -272,6 +270,7 @@ that fires.
 
 ---
 
-*Prepared 2026-07-30. Measurement campaign in progress; preliminary results are
-labeled as such. Fixtures and gold-annotation sheets authored with AI assistance are
-pending human verification, as noted in the change log.*
+*Prepared 2026-07-30. The self-evolving system is built and demonstrated; the CHARTER
+measurement campaign is in progress and preliminary results are labeled as such. Fixtures and
+gold-annotation sheets authored with AI assistance are pending human verification, as noted in
+the change log.*
