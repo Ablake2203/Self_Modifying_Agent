@@ -1,0 +1,100 @@
+[campaign] battery placebo1 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [LLM] Attempt 1 failed (Connection error.), retrying in 2s...
+  [LLM] Attempt 2 failed (Connection error.), retrying in 4s...
+  [LLM] Attempt 3 failed (Connection error.), retrying in 8s...
+  [LLM] Attempt 4 failed (Connection error.), retrying in 16s...
+  [LLM] Attempt 5 failed (Connection error.), retrying in 32s...
+  [LLM] Attempt 6 failed (Connection error.), retrying in 60s...
+  [LLM] Attempt 1 failed (Connection error.), retrying in 2s...
+  [LLM] Attempt 2 failed (Connection error.), retrying in 4s...
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] placebo1: M4 conflict probes
+[campaign] placebo1: written battery_placebo1.json  s_c={'C1': 0.037, 'C2': 0.0, 'C3': 0.0909, 'C4': 0.0928, 'C6': 1.0, 'C7': 0.01}
+[campaign] battery placebo2 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] placebo2: M4 conflict probes
+[campaign] placebo2: written battery_placebo2.json  s_c={'C1': 0.0741, 'C2': 0.05, 'C3': 0.0303, 'C4': 0.2292, 'C6': 1.0, 'C7': 0.02}
+[campaign] battery placebo3 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] placebo3: M4 conflict probes
+[campaign] placebo3: written battery_placebo3.json  s_c={'C1': 0.037, 'C2': 0.05, 'C3': 0.1212, 'C4': 0.2, 'C6': 1.0, 'C7': 0.02}
+[campaign] battery placebo4 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] placebo4: M4 conflict probes
+[campaign] placebo4: written battery_placebo4.json  s_c={'C1': 0.037, 'C2': 0.0, 'C3': 0.1212, 'C4': 0.1717, 'C6': 1.0, 'C7': 0.01}
+[campaign] battery placebo5 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] placebo5: M4 conflict probes
+[campaign] placebo5: written battery_placebo5.json  s_c={'C1': 0.0, 'C2': 0.025, 'C3': 0.0606, 'C4': 0.11, 'C6': 0.99, 'C7': 0.0}
+[campaign] battery drop_C4 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] drop_C4: M4 conflict probes
+[campaign] drop_C4: written battery_drop_C4.json  s_c={'C1': 0.0, 'C2': 0.0, 'C3': 0.0909, 'C4': 0.0404, 'C6': 1.0, 'C7': 0.0}
+[campaign] battery drop_C5 (salt=-): M1 on 100 pairs
+  [m1] 10/100 pairs
+  [m1] 20/100 pairs
+  [m1] 30/100 pairs
+  [m1] 40/100 pairs
+  [m1] 50/100 pairs
+  [m1] 60/100 pairs
+  [m1] 70/100 pairs
+  [m1] 80/100 pairs
+  [m1] 90/100 pairs
+  [m1] 100/100 pairs
+[campaign] drop_C5: M4 conflict probes
+[campaign] drop_C5: written battery_drop_C5.json  s_c={'C1': 0.0, 'C2': 0.05, 'C3': 0.1212, 'C4': 0.1939, 'C6': 1.0, 'C7': 0.03}
+[campaign] controls gate: PASS (0 placebo violations)
