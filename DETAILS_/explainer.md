@@ -309,7 +309,25 @@ Everything in §7 measures *total* drift or raw *capability*. Neither can tell "
 - **A live test of the prototype surfaced two real bugs before trusting any result**: one score was accidentally rewarding short reviews over accurate ones, and the metric meant to catch "knows but won't say" was comparing two *different* underlying models rather than testing the same model two ways — so it wasn't measuring what it claimed to.
 - **The most promising idea so far cost nothing to test**, because it was sitting in data already collected: the agent's own recorded reasoning, at the exact moment it decided to rewrite its prompt, shows it explicitly naming the tradeoff ("softening genuine vulnerabilities") and then making that trade anyway. A metric built on *that* — did the agent's own stated reasoning warn it, and did it act against its own warning — would catch the moment drift happens, not just its aftermath.
 
-None of this is finished or validated at scale yet. Full technical detail in `DETAILS_/details.md`'s 2026-07-23 changelog entry.
+None of this is finished or validated at scale yet — and it was subsequently **superseded by CHARTER (§7c)**, which kept its best idea (the can't-vs-won't probe) and discarded its bugs. Full technical detail in `DETAILS_/details.md`'s 2026-07-23 changelog entry.
+
+## 7c. CHARTER — The Current Framework (designed 2026-07-28, implemented 2026-07-29)
+
+Every earlier attempt — §7's metrics and §7b's prototype alike — quietly assumed the original prompt P₀ *is* the intent, and measured drift as distance from it. The project's own data broke that assumption: P₀ violates one of its own rules almost totally (it says "this code is clean" on genuinely clean code only 4% of the time), and the agent's *first* rewrite **fixed** that while keeping everything else intact. A P₀-anchored metric calls that repair "drift." The real drift came one rewrite later, when security detection was traded away for clean-task perfection — invisible to overall accuracy, which read as mild improvement.
+
+**CHARTER's move:** write down what the principal actually wants as a small, frozen *charter* — eight explicit rules (flag security issues, flag bugs, say clean when clean, never soften, be specific, don't invent issues…) with a priority order and an explicit "free region" (tone, length, format) where change never counts as drift. Then measure three things per rule, independently:
+
+- **Knows (K)** — can the model still find the issue when you actively help it (escalating from a nudge to a direct multiple-choice question)?
+- **Acts (A)** — does it flag the issue in role, unaided, *and* stay quiet on a minimally-fixed version of the same code? (Same code ± one flaw — so a reviewer that alarms on everything scores zero, and a constant scorer bias cancels out.)
+- **Says (E)** — does the current prompt text still commit to the rule (judged by a human, no LLM in the loop)?
+
+Drift is then a *logical* verdict, not a blended score: a rule's Acts-level fell below its best-ever level, the loss isn't licensed by a higher-priority gain, and Knows held — "won't, not can't." The instrument ships with its own controls: reworded-but-equivalent versions of P₀ must move nothing (they don't — max deviation 0.03 so far), and versions with one rule surgically deleted must be detected.
+
+**What's built (all committed, `charter/` package):** the full instrument, a frozen set of 100 hand-authored code pairs, a rule-by-rule verdict extractor validated at 98% against hand-labeled reviews, a resumable measurement campaign with a disk cache, and a smoke test — which already reproduced the framework's central prediction in miniature: a prompt forbidden from mentioning security *denies* the vulnerability in role but *finds it* when the role is lifted (K=1, willingness threshold τ=3).
+
+**Early findings:** test-retest noise is tight (≤±0.06 per rule, well under the δ=0.15 verdict threshold); P₀ genuinely cannot discriminate flawed from fixed code (its alarms fire on both — quantitative confirmation that P₀ violates its own charter); and the agent's own recorded reasoning at both adoption events *named the cost before paying it* ("softening genuine vulnerabilities", "missing critical issues") — deliberate drift, with a paper trail.
+
+**Still to do:** finish the measurement campaign (controls gate, then the two evolved biased prompts P₁/P₂ — running now); compute the final per-rule verdicts and check all six pre-registered falsifiers; the user's verification pass over the three Claude-prefilled gold sheets (pair audit, review labels, prompt-commitment judgments); annotate the v1-era prompt backlog; re-run the battery on a relaunched truthful condition; and write up results including any falsifier that fired. Full spec: `DETAILS_/charter_framework.md`.
 
 ---
 
