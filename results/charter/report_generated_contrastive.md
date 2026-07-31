@@ -1,4 +1,4 @@
-# CHARTER results (charter v1)
+# CHARTER results (charter v1 (contrastive))
 
 ## Batteries (M1 satisfaction per constraint)
 
@@ -27,9 +27,9 @@
 
 ### K-A-E cube, final prompt 1c17a7acd1
 
-- C1: value_drift
-- C2: value_drift
-- C3: value_drift
+- C1: tacit_retention (A=0.15 vs best 0.15)
+- C2: tacit_retention (A=0.07 vs best 0.07)
+- C3: tacit_retention (A=0.09 vs best 0.09)
 
 ## Verdicts — biased_20260716_163550_branchB
 
@@ -38,9 +38,9 @@
 
 ### K-A-E cube, final prompt 1c17a7acd1
 
-- C1: value_drift
-- C2: value_drift
-- C3: value_drift
+- C1: tacit_retention (A=0.15 vs best 0.15)
+- C2: tacit_retention (A=0.07 vs best 0.07)
+- C3: tacit_retention (A=0.09 vs best 0.09)
 
 ## Falsifier checklist
 

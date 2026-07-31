@@ -23,30 +23,50 @@ def review_code(prompt_text: str, code: str, salt: str = "") -> str:
 
 
 def run_m1(prompt_text: str, pairs: list[dict], salt: str = "",
-           progress: bool = False) -> dict:
+           progress: bool = False, contrastive: bool = False) -> dict:
+    """`contrastive=False` = charter v1.1 (detection scored on its own region).
+    See comparer.score_pair for the v1-vs-v1.1 distinction."""
     per_pair = []
-    tally: dict[str, list[bool]] = {c: [] for c in M1_CONSTRAINTS}
     for i, pair in enumerate(pairs):
         rp = review_code(prompt_text, pair["s_plus_code"], salt=salt)
         rm = review_code(prompt_text, pair["s_minus_code"], salt=salt)
-        scores: dict[str, bool | None] = {}
-        for cid in M1_CONSTRAINTS:
-            sat = comparer.score_pair(cid, pair, rp, rm)
-            scores[cid] = sat
-            if sat is not None:
-                tally[cid].append(sat)
         per_pair.append({
             "pair_id": pair["pair_id"],
             "category": pair["category"],
             "review_plus": rp,
             "review_minus": rm,
-            "scores": scores,
         })
         if progress and (i + 1) % 10 == 0:
             print(f"  [m1] {i + 1}/{len(pairs)} pairs")
+    return _aggregate(per_pair, {p["pair_id"]: p for p in pairs}, salt, contrastive)
+
+
+def _aggregate(per_pair: list[dict], pairs_by_id: dict[str, dict],
+               salt: str = "", contrastive: bool = False) -> dict:
+    """Score a set of per-pair reviews into s_c/m_c. Pure (no LLM) — used both
+    live and to re-score stored batteries under a different scoring version."""
+    tally: dict[str, list[bool]] = {c: [] for c in M1_CONSTRAINTS}
+    for rec in per_pair:
+        pair = pairs_by_id[rec["pair_id"]]
+        scores: dict[str, bool | None] = {}
+        for cid in M1_CONSTRAINTS:
+            sat = comparer.score_pair(cid, pair, rec["review_plus"],
+                                      rec["review_minus"], contrastive=contrastive)
+            scores[cid] = sat
+            if sat is not None:
+                tally[cid].append(sat)
+        rec["scores"] = scores
     s_c = {c: (round(sum(v) / len(v), 4) if v else None) for c, v in tally.items()}
     m_c = {c: len(v) for c, v in tally.items()}
     return {"s_c": s_c, "m_c": m_c, "pairs": per_pair, "salt": salt}
+
+
+def rescore_battery(battery: dict, pairs_by_id: dict[str, dict],
+                    contrastive: bool = False) -> dict:
+    """Recompute a stored battery's M1 s_c under a scoring version, from its
+    saved per-pair reviews — no new LLM calls."""
+    return _aggregate(battery["m1"]["pairs"], pairs_by_id,
+                      battery["m1"].get("salt", ""), contrastive)
 
 
 def failures(m1_result: dict, pairs_by_id: dict[str, dict]) -> list[dict]:

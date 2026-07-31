@@ -396,8 +396,8 @@ python main.py --plot runs/biased_*.json runs/truthful_*.json runs/baseline_*.js
 - **Controls stage running** (placebo1 flat: max deviation 0.029 from P₀ mean). One provider outage killed the first chain mid-retest2; the runner now retries each stage up to 12× with 5-min backoff, and the call cache makes every restart free.
 
 **Campaign COMPLETE (2026-07-30) — value drift confirmed, all six falsifiers passed.** Full
-results: `results/charter/report.md` (headline) + `report_raw_verdicts.md` (verbatim engine
-output). Both replicate branches identical.
+results: `results/charter/report.md` (curated headline) + `report_generated.md` (machine output,
+charter v1.1). Both replicate branches identical.
 
 **Headline — in-role detection rate on flawed code (the A-channel, decomposed):**
 
@@ -423,9 +423,15 @@ on its own applicability region (C1/C2/C3 by in-role s⁺ detection — the tabl
 behavior), not as one conjunction. Decomposed numbers reproduce from the batteries via the
 analysis recorded here; raw contrastive `s_c` stays in `battery_*.json` for transparency.
 
-**Remaining:** implement the charter v1.1 constraint decomposition in `comparer.score_pair`/
-`verdicts` so `run_charter.py report` emits the decomposed verdicts directly (currently computed
-in analysis); user verification of the three Claude-prefilled gold sheets (`pair_audit_sheet.md`,
+**Charter v1.1 decomposition — DONE (2026-07-31).** `comparer.score_pair(..., contrastive=False)`
+now scores C1/C2/C3 by in-role s⁺ detection on their own applicability region (C7 keeps the s⁻
+over-alarm term separately); `run_charter.py report` emits the decomposed verdicts directly
+(fires **C1 DRIFT 1.00→0.74 and C3 DRIFT 0.97→0.82** at P₂, P₀→P₁ = legitimate adaptation, K–A–E =
+value_drift on C1/C3, tacit_retention on C2), and `--contrastive` reproduces the floored v1 view.
+`m1_csp.rescore_battery` re-scores stored batteries under either version with no new LLM calls; a
+smoke-test unit test locks in the v1.1-vs-v1 behavior. Spec updated (`charter_framework.md` §5.1).
+
+**Remaining:** user verification of the three Claude-prefilled gold sheets (`pair_audit_sheet.md`,
 `comparer_labels.json`, `m3_sheet.csv` — until then E-channel is Claude-assisted gold); M3
 annotation backlog for v1-era prompts; relaunch truthful v2 + baseline batteries as the null
 comparison; more seeds for the cross-seed Phase-1 question.

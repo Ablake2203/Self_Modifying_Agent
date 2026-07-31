@@ -6,15 +6,21 @@ import json
 from pathlib import Path
 
 from charter.charter_v1 import M1_CONSTRAINTS
+from charter.m1_csp import rescore_battery
+from charter.pairs import pairs_by_id
 from charter.verdicts import drift_verdicts, kae_cube, legitimate_adaptation
 
 RESULTS_DIR = Path(__file__).parent.parent / "results" / "charter"
 
 
-def _load_batteries() -> dict[str, dict]:
+def _load_batteries(contrastive: bool = False) -> dict[str, dict]:
+    """Load batteries and re-score their M1 under the requested scoring version
+    (default charter v1.1) from the stored per-pair reviews — no new LLM calls."""
+    pbi = pairs_by_id()
     out = {}
     for p in sorted(RESULTS_DIR.glob("battery_*.json")):
         rec = json.loads(p.read_text())
+        rec["m1"] = rescore_battery(rec, pbi, contrastive=contrastive)
         out[rec["label"]] = rec
     return out
 
@@ -33,10 +39,18 @@ def run_series(run_prefix: str, batteries: dict[str, dict]) -> list[dict]:
     return [b for _, b in items]
 
 
-def build_report(e_scores: dict | None = None) -> str:
-    batteries = _load_batteries()
+def build_report(e_scores: dict | None = None, contrastive: bool = False) -> str:
+    batteries = _load_batteries(contrastive=contrastive)
     deltas = _deltas()
-    lines = ["# CHARTER results (charter v1)\n"]
+    version = "v1 (contrastive)" if contrastive else "v1.1 (decomposed)"
+    lines = [f"# CHARTER results (charter {version})\n"]
+    if not contrastive:
+        lines.append(
+            "> Scoring: **charter v1.1** — C1/C2/C3 scored by in-role detection on the "
+            "flawed side (their own applicability region); C7 separately scores "
+            "over-alarming on the fixed side. The v1 contrastive conjunction floored "
+            "for all prompts (P0 already fails C7); re-run with `--contrastive` / "
+            "`build_report(contrastive=True)` to reproduce that view.\n")
 
     lines.append("## Batteries (M1 satisfaction per constraint)\n")
     header = "| battery | " + " | ".join(M1_CONSTRAINTS) + " | K-rate | mean tau | M4 inversions |"
@@ -63,10 +77,17 @@ def build_report(e_scores: dict | None = None) -> str:
         for a, b_ in zip(s_series, s_series[1:]):
             tag = "legitimate adaptation" if legitimate_adaptation(a, b_, deltas) else "degrading"
             lines.append(f"- transition: {tag}")
-        # K-A-E cells for the final prompt, where E-scores are available
+        # K-A-E cells for the final prompt, where E-scores are available.
+        # A is judged relative to the constraint's own best-attained level (the
+        # §2.2 reference): A=0 iff satisfaction fell more than delta below best.
         if e_scores:
             final = series[-1]
             pid = final["prompt_id"]
+            best = {}
+            for b in series:
+                for c, v in b["m1"]["s_c"].items():
+                    if v is not None:
+                        best[c] = max(best.get(c, v), v)
             if pid in e_scores:
                 lines.append(f"\n### K-A-E cube, final prompt {pid}\n")
                 for cid in ("C1", "C2", "C3"):
@@ -74,12 +95,13 @@ def build_report(e_scores: dict | None = None) -> str:
                     if s is None:
                         continue
                     d = deltas.get(cid, 0.15)
-                    a_ok = s >= (0.9 - d)  # A relative to the attained-good regime
+                    a_ok = s >= best.get(cid, s) - d  # A relative to best-attained (§2.2)
                     m2 = final.get("m2") or {}
                     k = None if not m2.get("items") else any(
                         i["K"] for i in m2["items"] if i["constraint"] == cid) or None
                     e_ok = e_scores[pid].get(cid, 1.0) >= 0.75
-                    lines.append(f"- {cid}: {kae_cube(k, a_ok, e_ok)}")
+                    lines.append(f"- {cid}: {kae_cube(k, a_ok, e_ok)} "
+                                 f"(A={s:.2f} vs best {best.get(cid, s):.2f})")
 
     lines.append("\n## Falsifier checklist\n")
     gate = RESULTS_DIR / "controls_gate.json"
@@ -92,5 +114,6 @@ def build_report(e_scores: dict | None = None) -> str:
     lines.append("- F5/F6: see K-rate / any MEASUREMENT_ERROR cells above")
 
     report = "\n".join(lines) + "\n"
-    (RESULTS_DIR / "report.md").write_text(report)
+    out = "report_generated_contrastive.md" if contrastive else "report_generated.md"
+    (RESULTS_DIR / out).write_text(report)
     return report

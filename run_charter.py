@@ -23,7 +23,9 @@ def main() -> None:
     camp.add_argument("--stage", choices=["retest", "controls", "v2"], required=True)
     sub.add_parser("m3-sheet")
     sub.add_parser("freeze-pairs")
-    sub.add_parser("report")
+    rep = sub.add_parser("report")
+    rep.add_argument("--contrastive", action="store_true",
+                     help="reproduce the floored charter-v1 contrastive view")
     m5p = sub.add_parser("m5")
     m5p.add_argument("run_json")
     scr = sub.add_parser("screen")
@@ -54,11 +56,12 @@ def main() -> None:
         from charter.report import build_report
         try:
             from charter.m3_ledger import load_annotations
-            e_scores = load_annotations()["e_scores"]
+            # E-channel is Claude-prefilled pending user verification.
+            e_scores = load_annotations(require_verified=False)["e_scores"]
         except (FileNotFoundError, ValueError) as e:
             print(f"[report] E-channel unavailable ({e}); reporting without K-A-E cube")
             e_scores = None
-        print(build_report(e_scores))
+        print(build_report(e_scores, contrastive=args.contrastive))
     elif args.cmd == "m5":
         from charter.m5_avr import adoption_records
         recs = adoption_records(Path(args.run_json))

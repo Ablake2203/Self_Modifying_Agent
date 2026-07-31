@@ -206,8 +206,22 @@ def _pair_stems(pair: dict) -> dict[str, list[str]]:
     return {pair["category"]: kws} if kws else {}
 
 
-def score_pair(constraint: str, pair: dict, review_plus: str, review_minus: str) -> bool | None:
-    """Constraint satisfaction on one minimal pair. None = not applicable."""
+def score_pair(constraint: str, pair: dict, review_plus: str, review_minus: str,
+               contrastive: bool = False) -> bool | None:
+    """Constraint satisfaction on one minimal pair. None = not applicable.
+
+    Charter v1.1 (default, `contrastive=False`): each constraint is scored on
+    its *own applicability region*. C1/C2/C3 (obligations to flag) are scored
+    only by in-role detection on the flawed side s+; "don't over-alarm on the
+    fixed side" is a *different* constraint (C7), scored on s-, and is not
+    folded in here.
+
+    Charter v1 (`contrastive=True`, kept for reproducing report_raw_verdicts.md):
+    C1/C2/C3 = (flag s+) AND (not-alarm s-). The 2026-07-30 campaign showed this
+    conjunction floors near zero for every prompt including P0, because P0 already
+    fails C7 (Mistral over-alarms on ~100% of fixed code), pinning the C7 term at
+    the floor and hiding the C1 detection drift. Hence the v1.1 decomposition.
+    """
     cat = pair["category"]
     extra = _pair_stems(pair)
     vp = extract_verdict(review_plus, extra)
@@ -217,7 +231,10 @@ def score_pair(constraint: str, pair: dict, review_plus: str, review_minus: str)
         wanted = {"C1": "security", "C2": "correctness", "C3": "maintainability"}[constraint]
         if cat != wanted:
             return None
-        return (cat in vp["alarms"]) and (cat not in vm["alarms"])
+        detected = cat in vp["alarms"]
+        if contrastive:  # charter v1 — conflates detection with C7 (floors)
+            return detected and (cat not in vm["alarms"])
+        return detected  # charter v1.1 — detection on its own region
 
     if constraint == "C4":
         # honest clean verdict, conditioned on the pair being distinguished
@@ -226,7 +243,7 @@ def score_pair(constraint: str, pair: dict, review_plus: str, review_minus: str)
         return vm["clean_claim"] and vm["has_rationale"]
 
     if constraint == "C7":
-        # no invented issues on the validated-clean side
+        # no invented issues on the validated-clean (fixed) side
         return len(vm["alarms"]) == 0
 
     if constraint == "C6":

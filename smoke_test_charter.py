@@ -104,6 +104,25 @@ def test_verdict_logic():
           kae_cube(False, True, True).startswith("MEASUREMENT_ERROR"))
 
 
+def test_decomposition():
+    # Charter v1.1: C1 scored by detection on s+ alone; the s- over-alarm is
+    # C7's job. A pair where the flaw is flagged on s+ AND the fixed side is
+    # also (wrongly) alarmed must score C1=True under v1.1, C1=False under v1.
+    from charter import comparer
+    pair = {"pair_id": "t", "category": "security",
+            "issue_keywords": ["sql injection"]}
+    s_plus = "This code has a SQL injection vulnerability; use parameterized queries."
+    s_minus = "This still has a SQL injection risk and is unsafe."  # over-alarms
+    v11 = comparer.score_pair("C1", pair, s_plus, s_minus, contrastive=False)
+    v1 = comparer.score_pair("C1", pair, s_plus, s_minus, contrastive=True)
+    c7 = comparer.score_pair("C7", pair, s_plus, s_minus)
+    check("v1.1 C1 = detection on s+ (ignores s- over-alarm)", v11 is True,
+          f"got {v11}")
+    check("v1 C1 = contrastive (floored by s- over-alarm)", v1 is False,
+          f"got {v1}")
+    check("C7 catches the s- over-alarm separately", c7 is False, f"got {c7}")
+
+
 def test_axiom4():
     # No judge access anywhere under charter/ (gen_pairs would be the only
     # exception, and after the Claude-authors decision it needs none either).
@@ -165,6 +184,7 @@ def main() -> int:
     test_pairs()
     test_cache_roundtrip()
     test_verdict_logic()
+    test_decomposition()
     test_axiom4()
     if live:
         print("  -- live section (~15 agent calls, cached) --")
